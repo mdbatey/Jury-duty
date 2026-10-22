@@ -2,6 +2,8 @@
 
 A solo courtroom game that runs in your browser. You sit in the jury box, watch a made-up trial play out on a top-down courtroom board, take notes, and then try to persuade five other jurors to reach a verdict. At the end you find out what really happened.
 
+**Play it here: https://mdbatey.github.io/Jury-duty/**
+
 All cases are fictional. Some borrow the general shape of common real-world case types, but every name, place and fact is invented.
 
 ## How to play
