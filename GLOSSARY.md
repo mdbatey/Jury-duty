@@ -34,6 +34,10 @@ _Avoid_: AI juror, bot, NPC
 A piece of evidence from the trial that a juror can write in their notebook and argue with in the jury room.
 _Avoid_: Card, note, clue
 
+**Struck fact**:
+A fact the judge ordered the jury to ignore. Arguing with one makes computer jurors trust that juror less. Players are told the judge "threw it out."
+_Avoid_: Inadmissible fact, thrown-out evidence (in code and docs)
+
 **Notebook**:
 A human juror's private list of facts, limited to seven.
 _Avoid_: Hand, notes
