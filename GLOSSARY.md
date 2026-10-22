@@ -55,3 +55,7 @@ _Avoid_: Round, move
 **Mood**:
 How a computer juror is currently leaning on the verdict, shown to everyone (for example "Leaning guilty").
 _Avoid_: Lean, opinion score
+
+**Report card**:
+A juror's private summary at the end of a case: their notebook, whether they argued with thrown-out evidence, and how their ballot compared with the verdict the evidence supports.
+_Avoid_: Score, results
