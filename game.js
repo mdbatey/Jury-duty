@@ -319,10 +319,60 @@
   // Draw the trial's dialogue box and move the board to the current line.
   function showDialog() {
     var g = ui.g;
-    // A line's sound plays the first time it appears, not after Back.
-    if (beginLine(g) && g.beats[g.beat].sfx) S.play(g.beats[g.beat].sfx);
+    // A line's sound and jurors' reactions happen the first time it appears, not after Back.
+    var fresh = beginLine(g);
+    if (fresh && g.beats[g.beat].sfx) S.play(g.beats[g.beat].sfx);
     document.getElementById("dialog").innerHTML = ui.screen === "solo" ? soloTrialDialog() : hostTrialDialog();
     updateBoard(g);
+    if (fresh) showReactions(g.beats[g.beat]);
+  }
+
+  // A reacting computer juror's face changes and a short word appears above
+  // their seat in the jury box for about two seconds.
+  var SVGNS = "http://www.w3.org/2000/svg";
+  var reacting = [];
+  function clearReactions() {
+    reacting.forEach(function (done) { done(); });
+    reacting = [];
+  }
+
+  function showReactions(b) {
+    // A new line replaces the last line's reactions instead of piling on.
+    clearReactions();
+    var board = app.querySelector(".board");
+    if (!board || !b.reactions) return;
+    b.reactions.forEach(function (r) {
+      var tok = board.querySelector('[data-tok="' + r.juror + '"]');
+      if (!tok) return;
+      var j = E.juror(r.juror);
+      var look = P.lookFor(null, j.name, j.look);
+      var face = tok.querySelector(".face");
+      if (face) face.innerHTML = P.tokenFace(look, r.expression, 13, "tok-clip");
+      var old = tok.querySelector(".bubble");
+      if (old) old.parentNode.removeChild(old);
+      // Keep the bubble inside the board even for seats near its left edge.
+      var x = Number((/translate\(([-\d.]+)px/.exec(tok.getAttribute("style") || "") || [0, 50])[1]);
+      var w = r.word.length * 5.4 + 12;
+      var dx = Math.max(0, w / 2 + 4 - x);
+      var g = document.createElementNS(SVGNS, "g");
+      g.setAttribute("class", "bubble");
+      var rect = document.createElementNS(SVGNS, "rect");
+      rect.setAttribute("x", dx - w / 2); rect.setAttribute("y", -38); rect.setAttribute("width", w); rect.setAttribute("height", 15); rect.setAttribute("rx", 7.5);
+      var text = document.createElementNS(SVGNS, "text");
+      text.setAttribute("x", dx); text.setAttribute("y", -27.5);
+      text.textContent = r.word;
+      g.appendChild(rect); g.appendChild(text);
+      tok.appendChild(g);
+      tok.parentNode.appendChild(tok);
+      var timer;
+      var done = function () {
+        clearTimeout(timer);
+        if (g.parentNode) g.parentNode.removeChild(g);
+        if (face && face.isConnected) face.innerHTML = P.tokenFace(look, "calm", 13, "tok-clip");
+      };
+      timer = setTimeout(done, 2000);
+      reacting.push(done);
+    });
   }
 
   function phaseHtml(b, index, total) {
