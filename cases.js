@@ -9,6 +9,8 @@ window.JURORS = [
     id: "ruth", name: "Ruth Abernathy", short: "Ruth", job: "Retired schoolteacher",
     bio: "Sticks to the rules. If the judge said to ignore something, she will remind you.",
     look: {skin: 1, hair: "bun", hairColor: "white", older: true, glasses: true, clothes: "#6b4f8a"},
+    react: { agree: ["Mm-hm.", "Noted."], against: ["Hm.", "Oh dear."] },
+    faces: { agree: "smug", against: "surprised" },
     likes: ["procedure", "records"], sway: 0.9,
     say: {
       agree: "Exactly my thinking.",
@@ -21,6 +23,8 @@ window.JURORS = [
     id: "dev", name: "Dev Malhotra", short: "Dev", job: "Software engineer",
     bio: "Wants timelines and records. Feelings don't do much for him.",
     look: {skin: 3, hair: "side", hairColor: "black", glasses: true, clothes: "#2e5a88"},
+    react: { agree: ["Makes sense.", "Right."], against: ["Huh.", "Wait."] },
+    faces: { agree: "smug", against: "surprised" },
     likes: ["records", "timeline"], sway: 1,
     say: {
       agree: "Right. The facts back that up.",
@@ -32,6 +36,8 @@ window.JURORS = [
     id: "carla", name: "Carla Mendes", short: "Carla", job: "ER nurse",
     bio: "Reads people. Cares about why someone would do something and whether witnesses seem honest.",
     look: {skin: 2, hair: "long", hairColor: "brown", clothes: "#3e6b55"},
+    react: { agree: ["Oh.", "Mm."], against: ["Oof.", "Oh no."] },
+    faces: { agree: "surprised", against: "sad" },
     likes: ["motive", "character", "witness"], sway: 1.1,
     say: {
       agree: "Yes. That's how I see it too.",
@@ -43,6 +49,8 @@ window.JURORS = [
     id: "hank", name: "Hank Duffy", short: "Hank", job: "Retired contractor",
     bio: "Stubborn. Trusts things he can see and touch more than anyone's story.",
     look: {skin: 0, hair: "bald", hairColor: "gray", older: true, facial: "beard", clothes: "#8a3b3b"},
+    react: { agree: ["Ha.", "Told ya."], against: ["Hmph.", "Nah."] },
+    faces: { agree: "smug", against: "angry" },
     likes: ["physical"], sway: 0.6,
     say: {
       agree: "Now you're talking.",
@@ -54,6 +62,8 @@ window.JURORS = [
     id: "tasha", name: "Tasha Greene", short: "Tasha", job: "College student",
     bio: "Doesn't take authority at its word. Pays close attention to how police and experts did their jobs.",
     look: {skin: 5, hair: "curly", hairColor: "black", clothes: "#9a7420"},
+    react: { agree: ["Exactly.", "See?"], against: ["Ugh.", "Really?"] },
+    faces: { agree: "smug", against: "angry" },
     likes: ["procedure", "expert"], sway: 1,
     say: {
       agree: "Thank you. Finally someone said it.",
@@ -74,6 +84,9 @@ window.JURORS = [
 //                       cross-examination, calm otherwise.
 //   sfx: "murmur"   the gallery murmurs after a surprising answer
 //   mark: "name"    names a line so a contradiction can point at it
+//   react: [{ juror, word, expression }]   hand-written computer juror
+//                   reactions for this line (otherwise jurors who care about
+//                   the fact's kind of evidence react on their own)
 // Objection lines: { objection, by: "plaintiff" | "defense", ruling, note }
 //
 // cards: facts the player can collect and argue with in the jury room.
@@ -187,7 +200,7 @@ window.CASES = [
           { q: "Who knows the combination to the office safe?", a: "Me, Dana, and my nephew Kyle." },
           { q: "What does Kyle do at the bakery?", a: "He's our early baker. He comes in around four in the morning, alone, to start the bread." },
           { q: "So on the nights Dana put the bag in the safe, Kyle was alone in the building with it for about three hours before she arrived?", a: "I suppose so. But Kyle is family.", card: "kyle-alone", expression: "surprised", sfx: "murmur" },
-          { q: "The two short nights that weren't Dana's. Who closed those?", a: "Kyle covered those two shifts.", card: "kyle-closed" }
+          { q: "The two short nights that weren't Dana's. Who closed those?", a: "Kyle covered those two shifts.", card: "kyle-closed", react: [{ juror: "tasha", word: "Called it.", expression: "smug" }] }
         ],
         jurorQuestion: [
           { q: "Did Kyle have any money troubles that you know of?", a: "Not that I knew of. Well, he did ask me for an advance on his pay in April. I said no.", card: "kyle-advance" },
@@ -208,7 +221,7 @@ window.CASES = [
         name: "Detective Luis Arroyo",
         role: "Investigating officer",
         direct: [
-          { q: "Detective, what did you learn about Ms. Whitlock's finances?", a: "Her landlord told me she was two months behind on rent in March.", card: "landlord" },
+          { q: "Detective, what did you learn about Ms. Whitlock's finances?", a: "Her landlord told me she was two months behind on rent in March.", card: "landlord", react: [{ juror: "hank", word: "Figures.", expression: "smug" }, { juror: "carla", word: "Oof.", expression: "sad" }] },
           { objection: "Hearsay", by: "defense", ruling: "Sustained", note: "Hearsay is repeating what someone said outside of court to prove it's true. The landlord isn't here to be cross-examined, so the jury has to ignore that answer. If you wrote it down, you can't use it." },
           { q: "Let me ask it differently. What did you find on her phone, with a warrant?", a: "A text to her sister on April 2: 'If I don't come up with rent this month I'm done. I don't know what to do.'", card: "rent-text", show: "State's Exhibit 2" },
           { q: "Did you find any large purchases?", a: "On April 20 she bought a 2014 sedan from a private seller for $3,800. Cash.", card: "cash-car" },
@@ -471,7 +484,7 @@ window.CASES = [
         ],
         cross: [
           { q: "Mr. Brandt, Rick is not a certified arborist, is he?", a: "He's not certified. But he's experienced.", card: "not-certified" },
-          { q: "Did Rick go into your yard, touch the tree, or test the trunk?", a: "He looked at it from the sidewalk and the driveway. Maybe ten minutes. He was dropping off a ladder anyway.", card: "sidewalk-look" },
+          { q: "Did Rick go into your yard, touch the tree, or test the trunk?", a: "He looked at it from the sidewalk and the driveway. Maybe ten minutes. He was dropping off a ladder anyway.", card: "sidewalk-look", react: [{ juror: "carla", word: "Wow.", expression: "surprised" }, { juror: "dev", word: "Ten minutes?", expression: "surprised" }] },
           { q: "Ms. Hollis offered to split the cost of a real inspection. Did you take her up on it?", a: "No. Rick already said it was fine.", card: "declined-split" },
           { q: "Rick isn't here today, is he?", a: "He's working.", card: "rick-absent" }
         ]
@@ -644,7 +657,7 @@ window.CASES = [
           { q: "How long was the man in the store, with his hood up?", a: "A minute and a half. Two minutes. His hood was up the whole time.", card: "two-minutes" },
           { q: "During that time, where were your eyes?", a: "On him. And on the knife, I guess. I was scared he'd use it.", card: "knife-focus" },
           { q: "When you picked photo four, what exactly did you say?", a: "I think I said, 'I'm pretty sure it's him.'", card: "pretty-sure" },
-          { q: "And what did the detective say back?", a: "He said, 'Good. That's who we thought.' After that I felt more sure.", card: "feedback", expression: "surprised", sfx: "murmur" }
+          { q: "And what did the detective say back?", a: "He said, 'Good. That's who we thought.' After that I felt more sure.", card: "feedback", expression: "surprised", sfx: "murmur", react: [{ juror: "ruth", word: "Oh dear.", expression: "sad" }] }
         ]
       },
       {

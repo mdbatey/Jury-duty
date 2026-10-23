@@ -409,7 +409,13 @@ p { margin: 0; }
 .flag-result.miss { background: var(--paper); border-left: 4px solid var(--def); }
 .fact.bonus { border-left-color: var(--no); }
 
+.bubble rect { fill: var(--surface); stroke: var(--ink); stroke-width: 1; }
+.bubble text { font: 600 8.5px var(--font-body); fill: var(--ink); text-anchor: middle; }
+.bubble { animation: pop 0.25s ease both; pointer-events: none; }
+@keyframes pop { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
 @media (prefers-reduced-motion: reduce) {
+  .bubble { animation: none; }
   .tok { transition: none; }
   .tok.speaking .ring, .vote-card, .objection-banner.show { animation: none; }
   .objection-banner.show { opacity: 1; transform: translate(-50%, -50%) rotate(-6deg); }

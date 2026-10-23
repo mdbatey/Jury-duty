@@ -6,6 +6,8 @@
 
   var CASES = window.CASES || [];
   var TRIES = 3;
+  // A computer juror's mood can move at most this much from reactions during the trial.
+  var REACT_CAP = 10;
 
   // Each contradiction's bonus fact joins the case's facts, so it can be
   // argued like any other fact once a juror earns it.
@@ -130,7 +132,7 @@
     var pos = {};
     castOf(c).forEach(function (p) { pos[p.id] = p.home; });
 
-    function beat(b) { b.pos = Object.assign({}, pos); beats.push(b); }
+    function beat(b) { b.id = beats.length; b.pos = Object.assign({}, pos); beats.push(b); }
     function guide(text, phase, step) { beat({ who: null, text: text, phase: phase, kind: "guide", step: step }); }
 
     guide(mode === "solo"
@@ -170,13 +172,15 @@
           part[2].forEach(function (l) {
             if (l.objection) {
               var objector = l.by === "defense" ? "dl" : "pl";
+              var struck = beats[beats.length - 1].id;
               beat({ who: objector, text: "Objection, Your Honor. " + l.objection + ".", phase: phase, kind: "objection", step: si, expression: "angry", sfx: "objection" });
-              beat({ who: "judge", text: l.ruling + "." + (l.ruling === "Sustained" ? " The jury will disregard that answer." : ""), phase: phase, step: si, expression: "calm", sfx: "gavel" });
+              // A sustained objection strikes the answer just given.
+              beat({ who: "judge", text: l.ruling + "." + (l.ruling === "Sustained" ? " The jury will disregard that answer." : ""), phase: phase, step: si, expression: "calm", sfx: "gavel", strikes: l.ruling === "Sustained" ? struck : undefined });
               guide(l.note, phase, si);
             } else {
               beat({ who: part[1], text: l.q, phase: phase, step: si });
               // Witnesses look nervous under cross-examination unless a line says otherwise.
-              beat({ who: w, text: l.a, phase: phase, card: l.card, show: l.show, step: si, sfx: l.sfx, mark: l.mark, answer: true, expression: l.expression || (part[0] === "Cross-examination" ? "nervous" : "calm") });
+              beat({ who: w, text: l.a, phase: phase, card: l.card, show: l.show, step: si, sfx: l.sfx, mark: l.mark, react: l.react, answer: true, expression: l.expression || (part[0] === "Cross-examination" ? "nervous" : "calm") });
             }
           });
           pos[part[1]] = part[1] === "dl" ? "d1" : "p1";
@@ -195,7 +199,7 @@
   // ---------- Game setup and seats ----------
 
   function createGame(caseId, mode) {
-    var g = { caseId: caseId, mode: mode, phase: "lobby", beats: buildBeats(findCase(caseId), mode), beat: 0, humans: [], foreperson: 0, d: null };
+    var g = { caseId: caseId, mode: mode, phase: "lobby", beats: buildBeats(findCase(caseId), mode), beat: 0, humans: [], foreperson: 0, d: null, reached: {}, nudges: {} };
     if (mode === "solo") {
       g.humans.push(newHuman("You", ""));
       g.phase = "trial";
@@ -349,7 +353,7 @@
         return true;
       case "advance":
         if (g.phase !== "trial" || !lead) return false;
-        if (g.beat < g.beats.length - 1) g.beat++;
+        if (g.beat < g.beats.length - 1) { g.beat++; reachBeat(g); }
         else startDeliberation(g);
         return true;
       case "back":
@@ -405,10 +409,73 @@
     b.askedBy = h;
     var base = { pos: b.pos, phase: "Juror question", step: b.step };
     g.beats.splice(g.beat + 1, 0,
-      Object.assign({}, base, { who: "judge", text: "A juror asks: \"" + q.q + "\" Please answer the question." }),
-      Object.assign({}, base, { who: b.witness, text: q.a, card: q.card, mark: q.mark, answer: true, sfx: q.sfx, expression: q.expression || "calm" }));
+      Object.assign({}, base, { id: "q" + b.id, who: "judge", text: "A juror asks: \"" + q.q + "\" Please answer the question." }),
+      Object.assign({}, base, { id: "a" + b.id, who: b.witness, text: q.a, card: q.card, mark: q.mark, react: q.react, answer: true, sfx: q.sfx, expression: q.expression || "calm" }));
     g.beat++;
     return true;
+  }
+
+  // ---------- Reactions during the trial ----------
+
+  function trialLean(g, c, id) {
+    return clamp(c.jury.start[id] + (g.nudges[id] || 0));
+  }
+
+  // The first time a line appears, computer jurors may react to it.
+  function reachBeat(g) {
+    var b = g.beats[g.beat];
+    if (!b || g.reached[b.id]) return;
+    g.reached[b.id] = true;
+    if (b.strikes !== undefined) strikeReactions(g, b);
+    react(g, b);
+  }
+
+  function react(g, b) {
+    var c = findCase(g.caseId);
+    var card = b.card ? c.cards[b.card] : null;
+    var present = computers(g);
+    var here = function (id) { return present.some(function (j) { return j.id === id; }); };
+    var list;
+    if (b.react) {
+      list = b.react.filter(function (r) { return here(r.juror); }).map(function (r) { return { juror: r.juror, word: r.word, expression: r.expression }; });
+    } else if (card) {
+      var matches = function (j) { return j.likes.filter(function (t) { return card.tags.indexOf(t) >= 0; }).length; };
+      list = present.filter(function (j) { return matches(j) > 0; })
+        .sort(function (x, y) { return matches(y) - matches(x); })
+        .slice(0, 2).map(function (j) { return { juror: j.id }; });
+    }
+    if (!list || !list.length) return;
+    list.forEach(function (r) {
+      var j = juror(r.juror);
+      var agrees = card ? (trialLean(g, c, j.id) >= threshold(c)) === (card.dir > 0) : true;
+      var mood = agrees ? "agree" : "against";
+      // Vary the word from line to line. Ids can be numbers or strings ("a12" for juror-question answers).
+      var seed = String(b.id).split("").reduce(function (n, ch) { return n + ch.charCodeAt(0); }, j.id.length);
+      if (!r.word) r.word = j.react[mood][seed % j.react[mood].length];
+      if (!r.expression) r.expression = j.faces[mood];
+      r.nudge = 0;
+      if (card && !card.bonus) {
+        var cur = g.nudges[j.id] || 0;
+        var next = Math.max(-REACT_CAP, Math.min(REACT_CAP, cur + card.dir * card.power * 1.5 * j.sway));
+        r.nudge = next - cur;
+        g.nudges[j.id] = next;
+      }
+    });
+    b.reactions = list;
+  }
+
+  // When the judge strikes an answer, jurors take back their reactions to it,
+  // except Hank, who keeps half: it's hard to unhear something.
+  function strikeReactions(g, ruling) {
+    var answer = g.beats.filter(function (x) { return x.id === ruling.strikes; })[0];
+    if (!answer || !answer.reactions) return;
+    var hankKept = false;
+    answer.reactions.forEach(function (r) {
+      var keep = r.juror === "hank" ? 0.5 : 0;
+      if (keep && r.nudge) hankKept = true;
+      g.nudges[r.juror] = (g.nudges[r.juror] || 0) - r.nudge * (1 - keep);
+    });
+    if (hankKept) ruling.react = [{ juror: "hank", word: "Can't unhear it.", expression: "smug" }];
   }
 
   // ---------- Deliberation ----------
@@ -424,7 +491,8 @@
     var present = seats(g).filter(function (s) { return s.kind === "computer"; }).map(function (s) { return s.juror; });
     g.phase = "deliberation";
     g.d = { leans: {}, round: 1, log: [], pi: 0, voting: false, verdict: null, tally: null, computers: present.map(function (j) { return j.id; }) };
-    present.forEach(function (j) { g.d.leans[j.id] = c.jury.start[j.id]; });
+    // Moods start where the trial left them.
+    present.forEach(function (j) { g.d.leans[j.id] = trialLean(g, c, j.id); });
     g.humans.forEach(function (p) { p.choice = null; p.ballot = null; });
 
     var likes = present.map(function (j) { return j.short + " by " + j.likes.join(" and "); }).join("; ");
