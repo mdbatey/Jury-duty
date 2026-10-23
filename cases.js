@@ -72,6 +72,7 @@ window.JURORS = [
 //   expression: "sad"   the witness's face for that answer (calm, nervous,
 //                       angry, sad, smug, surprised). Default: nervous on
 //                       cross-examination, calm otherwise.
+//   sfx: "murmur"   the gallery murmurs after a surprising answer
 // Objection lines: { objection, by: "plaintiff" | "defense", ruling, note }
 //
 // cards: facts the player can collect and argue with in the jury room.
@@ -177,7 +178,7 @@ window.CASES = [
           { q: "Mr. Feld, the bank bags you use. Are they the tamper-evident kind, that show if they've been opened?", a: "No. They're plain zipper bags. The tamper-proof ones cost more.", card: "plain-bags" },
           { q: "Who knows the combination to the office safe?", a: "Me, Dana, and my nephew Kyle." },
           { q: "What does Kyle do at the bakery?", a: "He's our early baker. He comes in around four in the morning, alone, to start the bread." },
-          { q: "So on the nights Dana put the bag in the safe, Kyle was alone in the building with it for about three hours before she arrived?", a: "I suppose so. But Kyle is family.", card: "kyle-alone", expression: "surprised" },
+          { q: "So on the nights Dana put the bag in the safe, Kyle was alone in the building with it for about three hours before she arrived?", a: "I suppose so. But Kyle is family.", card: "kyle-alone", expression: "surprised", sfx: "murmur" },
           { q: "The two short nights that weren't Dana's. Who closed those?", a: "Kyle covered those two shifts.", card: "kyle-closed" }
         ],
         jurorQuestion: [
@@ -208,7 +209,7 @@ window.CASES = [
         cross: [
           { q: "Does that camera show the office, where the safe is?", a: "No." },
           { q: "Does any video show Ms. Whitlock opening a bag, or taking cash from anything?", a: "No.", card: "no-video" },
-          { q: "I'm showing you Defense Exhibit A, her bank statement. What does it show?", a: "A tax refund deposit of $3,100 on April 15, and a $3,100 cash withdrawal on April 19. The day before she bought the car.", card: "tax-refund", show: "Defense Exhibit A" },
+          { q: "I'm showing you Defense Exhibit A, her bank statement. What does it show?", a: "A tax refund deposit of $3,100 on April 15, and a $3,100 cash withdrawal on April 19. The day before she bought the car.", card: "tax-refund", sfx: "murmur", show: "Defense Exhibit A" },
           { q: "Did you check Kyle Feld's finances? His phone? His purchases?", a: "No. He wasn't a suspect.", card: "not-investigated" }
         ],
         exhibits: [
@@ -391,7 +392,7 @@ window.CASES = [
           { q: "Ms. Hollis, you're not a tree expert, are you?", a: "No. I looked it up online, and it said those mushrooms can mean rot." },
           { q: "Your homeowner's insurance has already paid part of your loss, hasn't it?", a: "Some of it. Not all.", card: "insurance" },
           { objection: "Relevance. Insurance", by: "plaintiff", ruling: "Sustained", note: "Juries usually aren't allowed to consider insurance. Whether someone had insurance has nothing to do with who was at fault. That answer can't be used." },
-          { q: "Other trees came down in that storm, didn't they? On your street?", a: "Yes. A maple came down two houses over.", card: "maple" }
+          { q: "Other trees came down in that storm, didn't they? On your street?", a: "Yes. A maple came down two houses over.", card: "maple", sfx: "murmur" }
         ],
         exhibits: [
           {
@@ -408,7 +409,7 @@ window.CASES = [
         role: "Certified arborist, expert witness",
         intro: "An expert witness may give opinions about their specialty. Ordinary witnesses can only say what they saw or heard. You don't have to accept an expert's opinion.",
         direct: [
-          { q: "Dr. Achebe, what did you find when you examined the fallen tree?", a: "Advanced heart rot. About 70 percent of the trunk's interior was decayed at the break. The mushrooms Ms. Hollis saw are the fruiting bodies of a rot fungus.", card: "rot-70", show: "Plaintiff's Exhibit 2" },
+          { q: "Dr. Achebe, what did you find when you examined the fallen tree?", a: "Advanced heart rot. About 70 percent of the trunk's interior was decayed at the break. The mushrooms Ms. Hollis saw are the fruiting bodies of a rot fungus.", card: "rot-70", sfx: "murmur", show: "Plaintiff's Exhibit 2" },
           { q: "Would a certified arborist have noticed that?", a: "Almost certainly. The fungus, the lean and the dead limbs are textbook warning signs. A resistance drill test would have confirmed the rot in about ten minutes.", card: "detectable", expression: "smug" },
           { q: "Would a healthy oak have survived the storm?", a: "In my opinion, more likely than not, yes. A trunk that's 70 percent hollow has very little strength left.", card: "would-survive" }
         ],
@@ -600,7 +601,7 @@ window.CASES = [
           { q: "How long was the man in the store, with his hood up?", a: "A minute and a half. Two minutes. His hood was up the whole time.", card: "two-minutes" },
           { q: "During that time, where were your eyes?", a: "On him. And on the knife, I guess. I was scared he'd use it.", card: "knife-focus" },
           { q: "When you picked photo four, what exactly did you say?", a: "I think I said, 'I'm pretty sure it's him.'", card: "pretty-sure" },
-          { q: "And what did the detective say back?", a: "He said, 'Good. That's who we thought.' After that I felt more sure.", card: "feedback", expression: "surprised" }
+          { q: "And what did the detective say back?", a: "He said, 'Good. That's who we thought.' After that I felt more sure.", card: "feedback", expression: "surprised", sfx: "murmur" }
         ]
       },
       {
@@ -619,7 +620,7 @@ window.CASES = [
           { q: "When you showed Ms. Petrov the photos, did you know which one was Marcus?", a: "Yes. I put the lineup together." },
           { q: "Some departments use 'blind' lineups, where the officer doesn't know who the suspect is, so they can't give hints. This wasn't one?", a: "No, it wasn't.", card: "not-blind" },
           { q: "Is there anything unique about that hoodie?", a: "No. It's a plain gray hoodie from a big department store.", card: "plain-hoodie" },
-          { q: "Fingerprints? The knife? The cash?", a: "The counter was wiped before we could check for prints. No knife or cash was found at his apartment.", card: "no-physical" }
+          { q: "Fingerprints? The knife? The cash?", a: "The counter was wiped before we could check for prints. No knife or cash was found at his apartment.", card: "no-physical", sfx: "murmur" }
         ],
         exhibits: [
           {

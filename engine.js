@@ -132,7 +132,8 @@
       if (s.type === "judge" || s.type === "instructions") {
         var phase = s.type === "judge" ? "The judge's welcome" : "Jury instructions";
         guide(EXPLAIN[s.type], phase);
-        s.text.forEach(function (t) { beat({ who: "judge", text: t, phase: phase }); });
+        // The gavel opens court on the judge's first line.
+        s.text.forEach(function (t, ti) { beat({ who: "judge", text: t, phase: phase, sfx: s.type === "judge" && ti === 0 ? "gavel" : undefined }); });
       } else if (s.type === "opening" || s.type === "closing") {
         var lawyer = s.side === "defense" ? "dl" : "pl";
         var ph = (s.type === "opening" ? "Opening statement" : "Closing argument") + ": " + sideName(c, s.side);
@@ -160,13 +161,13 @@
           part[2].forEach(function (l) {
             if (l.objection) {
               var objector = l.by === "defense" ? "dl" : "pl";
-              beat({ who: objector, text: "Objection, Your Honor. " + l.objection + ".", phase: phase, kind: "objection", step: si, expression: "angry" });
-              beat({ who: "judge", text: l.ruling + "." + (l.ruling === "Sustained" ? " The jury will disregard that answer." : ""), phase: phase, step: si, expression: "calm" });
+              beat({ who: objector, text: "Objection, Your Honor. " + l.objection + ".", phase: phase, kind: "objection", step: si, expression: "angry", sfx: "objection" });
+              beat({ who: "judge", text: l.ruling + "." + (l.ruling === "Sustained" ? " The jury will disregard that answer." : ""), phase: phase, step: si, expression: "calm", sfx: "gavel" });
               guide(l.note, phase, si);
             } else {
               beat({ who: part[1], text: l.q, phase: phase, step: si });
               // Witnesses look nervous under cross-examination unless a line says otherwise.
-              beat({ who: w, text: l.a, phase: phase, card: l.card, show: l.show, step: si, expression: l.expression || (part[0] === "Cross-examination" ? "nervous" : "calm") });
+              beat({ who: w, text: l.a, phase: phase, card: l.card, show: l.show, step: si, sfx: l.sfx, expression: l.expression || (part[0] === "Cross-examination" ? "nervous" : "calm") });
             }
           });
           pos[part[1]] = part[1] === "dl" ? "d1" : "p1";
@@ -360,7 +361,7 @@
     var base = { pos: b.pos, phase: "Juror question", step: b.step };
     g.beats.splice(g.beat + 1, 0,
       Object.assign({}, base, { who: "judge", text: "A juror asks: \"" + q.q + "\" Please answer the question." }),
-      Object.assign({}, base, { who: b.witness, text: q.a, card: q.card, expression: q.expression || "calm" }));
+      Object.assign({}, base, { who: b.witness, text: q.a, card: q.card, sfx: q.sfx, expression: q.expression || "calm" }));
     g.beat++;
     return true;
   }
