@@ -1,23 +1,12 @@
 (function () {
   "use strict";
 
-  var app = document.getElementById("app");
+  var E = window.JuryEngine;
+  var Net = window.JuryNet;
   var CASES = window.CASES || [];
   var JURORS = window.JURORS || [];
-  var NOTE_LIMIT = 7;
-  var ROUNDS = 6;
-
-  // Short explanations shown with each part of the trial, for players who
-  // have never been in a courtroom.
-  var EXPLAIN = {
-    judge: "The judge runs the courtroom and decides questions of law. You and the other jurors decide the facts: what happened, and whether it was proven.",
-    opening: "An opening statement is a lawyer's preview of the case. It is not evidence, so there's nothing to write down yet. Listen for what each side promises to prove.",
-    witnessPlaintiffCriminal: "The prosecution goes first because it has to prove its case. In direct examination, the lawyer who called the witness asks open questions. Then the other side cross-examines to test the story.",
-    witnessPlaintiffCivil: "The plaintiff is the person who brought the lawsuit, so their side goes first. Direct examination comes first, then the other side cross-examines.",
-    witnessDefense: "Now the defense presents its side. The defense never has to prove anything or call witnesses, but it may. The other side gets to cross-examine.",
-    closing: "In a closing argument, each lawyer tells you what they think the evidence showed. Like openings, closings are not evidence.",
-    instructions: "Before you deliberate, the judge explains the law. Your verdict must follow these rules."
-  };
+  var app = document.getElementById("app");
+  var JOIN_KEY = "jury-duty-join";
 
   var GLOSSARY = [
     ["Jury", "A group of ordinary people who listen to the evidence and decide what happened. Criminal juries usually have 12 people; civil juries often have 6 to 12. This game uses 6."],
@@ -45,11 +34,13 @@
     j0: [30, 144], j1: [64, 144], j2: [30, 182], j3: [64, 182], j4: [30, 220], j5: [64, 220]
   };
 
-  var state = defaultState();
-
-  function defaultState() {
-    return { screen: "home", caseId: null, beats: [], beat: 0, notes: [], asked: false, showNotebook: false, d: null };
-  }
+  // screen: home | pick | guide | solo | host | join | phone
+  var ui = {
+    screen: "home", pickMode: "solo",
+    g: null, showNotebook: false, sel: null, target: null,
+    host: null, conns: [], code: null, hostError: null, sig: "",
+    phone: null, view: null, phoneStatus: "", phoneError: "", retries: 0, lastHeard: 0, editing: false, joinCode: ""
+  };
 
   // ---------- Helpers ----------
 
@@ -59,150 +50,77 @@
     });
   }
 
-  function currentCase() {
-    for (var i = 0; i < CASES.length; i++) if (CASES[i].id === state.caseId) return CASES[i];
-    return null;
+  // This tab's seat (code, name, token) survives a reload so the phone can
+  // rejoin. The name is also remembered across tabs to prefill the form.
+  function readJoin() {
+    try {
+      return JSON.parse(sessionStorage.getItem(JOIN_KEY) || "null") || JSON.parse(localStorage.getItem(JOIN_KEY) || "null");
+    } catch (e) { return null; }
   }
 
-  function words(c) {
-    return c.kind === "criminal"
-      ? { yes: "Guilty", no: "Not guilty", yesId: "guilty", noId: "not-guilty" }
-      : { yes: "Liable", no: "Not liable", yesId: "liable", noId: "not-liable" };
+  function saveJoin(v) {
+    try { sessionStorage.setItem(JOIN_KEY, JSON.stringify(v)); } catch (e) {}
+    try { localStorage.setItem(JOIN_KEY, JSON.stringify({ code: v.code, name: v.name })); } catch (e) {}
   }
 
-  function threshold(c) { return c.kind === "criminal" ? 70 : 50; }
-  function needed(c) { return c.kind === "criminal" ? 6 : 5; }
-  function sideName(c, side) { return side === "defense" ? "defense" : c.kind === "criminal" ? "prosecution" : "plaintiff"; }
+  function kindClass(kind) { return "k-" + kind.replace(" ", " k-"); }
 
-  function initials(name) {
-    var parts = name.split(" ").filter(function (w) {
-      return !/^(Judge|Prosecutor|Defense|attorney|Attorney|Public|defender|Dr\.|Detective)$/.test(w);
-    });
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
-
-  function juror(id) {
-    for (var i = 0; i < JURORS.length; i++) if (JURORS[i].id === id) return JURORS[i];
-    return null;
-  }
-
-  // ---------- Cast and script ----------
-
-  function castOf(c) {
-    var judge = c.steps.filter(function (s) { return s.type === "judge"; })[0].speaker;
-    var list = [
-      { id: "judge", name: judge, role: "Judge", kind: "judge", home: "judge" },
-      { id: "clerk", name: "Court clerk", role: "Clerk", kind: "clerk", home: "clerk", ini: "CL" },
-      { id: "pl", name: c.parties.plaintiff.lawyer, role: c.kind === "criminal" ? "Prosecutor" : "Plaintiff's lawyer", kind: "pros", home: "p1" },
-      { id: "dl", name: c.parties.defense.lawyer, role: "Defense lawyer", kind: "def", home: "d1" },
-      { id: "def", name: c.parties.defense.label, role: "Defendant", kind: "def party", home: "d2" }
-    ];
-    if (c.kind === "civil") list.push({ id: "pla", name: c.parties.plaintiff.label, role: "Plaintiff", kind: "pros party", home: "p2" });
-    var g = 0;
-    c.steps.forEach(function (s) {
-      if (s.type === "witness" && !witnessId(c, s.name, true)) {
-        list.push({ id: "w" + g, name: s.name, role: s.role, kind: "wit", home: "g" + g });
-        g++;
+  // The six jury seats, ready to draw.
+  function juryPeople(g) {
+    var c = E.findCase(g.caseId);
+    return E.seats(g).map(function (s, i) {
+      if (s.kind === "human") {
+        var solo = g.mode === "solo";
+        var p = g.humans[s.h];
+        return { id: s.id, seat: i, name: solo ? "You" : p.name, ini: solo ? "YOU" : E.initials(p.name), kind: solo ? "you" : "human", human: true, connected: p.connected };
       }
+      var m = g.d ? E.mood(c, g.d.leans[s.id]) : null;
+      return { id: s.id, seat: i, name: s.juror.short, full: s.juror.name, ini: E.initials(s.juror.name), kind: "juror", mood: m };
     });
-    list.push({ id: "you", name: "You", role: "Juror", kind: "you", home: "j0", ini: "YOU" });
-    JURORS.forEach(function (j, i) {
-      list.push({ id: j.id, name: j.name, role: "Juror", kind: "juror", home: "j" + (i + 1) });
-    });
-    list.forEach(function (p) { if (!p.ini) p.ini = initials(p.name); });
-    return list;
   }
 
-  function witnessId(c, name, partiesOnly) {
-    if (name === c.parties.defense.label) return "def";
-    if (c.kind === "civil" && name === c.parties.plaintiff.label) return "pla";
-    if (partiesOnly) return null;
-    var cast = castOf(c);
-    for (var i = 0; i < cast.length; i++) if (cast[i].name === name) return cast[i].id;
-    return null;
-  }
-
-  function person(c, id) {
-    var cast = castOf(c);
-    for (var i = 0; i < cast.length; i++) if (cast[i].id === id) return cast[i];
-    return null;
-  }
-
-  function buildBeats(c) {
-    var beats = [];
-    var pos = {};
-    castOf(c).forEach(function (p) { pos[p.id] = p.home; });
-
-    function beat(b) { b.pos = Object.assign({}, pos); beats.push(b); }
-    function guide(text, phase) { beat({ who: null, text: text, phase: phase, kind: "guide" }); }
-
-    guide("You're the juror in the highlighted seat in the jury box. Tap Next, or press the space bar, to move the trial along. When you hear an important fact, tap Write it down. You can keep " + NOTE_LIMIT + " notes, and you'll use them to argue in the jury room.", "Before the trial");
-
-    c.steps.forEach(function (s) {
-      if (s.type === "judge" || s.type === "instructions") {
-        var phase = s.type === "judge" ? "The judge's welcome" : "Jury instructions";
-        guide(EXPLAIN[s.type], phase);
-        s.text.forEach(function (t) { beat({ who: "judge", text: t, phase: phase }); });
-      } else if (s.type === "opening" || s.type === "closing") {
-        var lawyer = s.side === "defense" ? "dl" : "pl";
-        var ph = (s.type === "opening" ? "Opening statement" : "Closing argument") + ": " + sideName(c, s.side);
-        guide(EXPLAIN[s.type], ph);
-        pos[lawyer] = "podium";
-        s.text.forEach(function (t) { beat({ who: lawyer, text: t, phase: ph }); });
-        pos[lawyer] = s.side === "defense" ? "d1" : "p1";
-      } else if (s.type === "witness") {
-        var w = witnessId(c, s.name);
-        var caller = s.side === "defense" ? "dl" : "pl";
-        var crosser = s.side === "defense" ? "pl" : "dl";
-        var home = pos[w];
-        var explain = s.side === "defense" ? EXPLAIN.witnessDefense : c.kind === "criminal" ? EXPLAIN.witnessPlaintiffCriminal : EXPLAIN.witnessPlaintiffCivil;
-        var ph2 = "Witness: " + s.name;
-        guide(explain, ph2);
-        var who = s.side === "defense" ? "The defense calls " : c.kind === "criminal" ? "The State calls " : "The plaintiff calls ";
-        beat({ who: caller, text: who + s.name + " to the stand.", phase: ph2 });
-        pos[w] = "stand";
-        beat({ who: "clerk", text: "Please raise your right hand. Do you swear to tell the truth, the whole truth, and nothing but the truth?", phase: ph2 });
-        beat({ who: w, text: "I do.", phase: ph2 });
-        if (s.intro) guide(s.intro, ph2);
-        [["Direct examination", caller, s.direct], ["Cross-examination", crosser, s.cross]].forEach(function (part) {
-          var phase = part[0] + ": " + s.name;
-          pos[part[1]] = "podium";
-          part[2].forEach(function (l) {
-            if (l.objection) {
-              var objector = l.by === "defense" ? "dl" : "pl";
-              beat({ who: objector, text: "Objection, Your Honor. " + l.objection + ".", phase: phase, kind: "objection" });
-              beat({ who: "judge", text: l.ruling + "." + (l.ruling === "Sustained" ? " The jury will disregard that answer." : ""), phase: phase });
-              guide(l.note, phase);
-            } else {
-              beat({ who: part[1], text: l.q, phase: phase });
-              beat({ who: w, text: l.a, phase: phase, card: l.card, show: l.show, step: c.steps.indexOf(s) });
-            }
-          });
-          pos[part[1]] = part[1] === "dl" ? "d1" : "p1";
-        });
-        if (s.jurorQuestion) {
-          beat({ who: "judge", text: "Members of the jury, each of you may submit one written question for a witness during this trial. Would you like to ask " + s.name + " something?", phase: "Juror question", kind: "ask", step: c.steps.indexOf(s), witness: w });
-        }
-        beat({ who: "judge", text: "Thank you. You may step down.", phase: ph2 });
-        pos[w] = home;
-      }
-    });
-    beat({ who: "judge", text: "Members of the jury, you've heard all the evidence. You may now go to the jury room to deliberate.", phase: "To the jury room", kind: "end" });
-    return beats;
-  }
-
-  function exhibit(c, label) {
-    for (var i = 0; i < c.steps.length; i++) {
-      var xs = c.steps[i].exhibits || [];
-      for (var j = 0; j < xs.length; j++) if (xs[j].label === label) return xs[j];
+  function whoName(g, who) {
+    if (who.charAt(0) === "h" && /^h\d+$/.test(who)) {
+      var p = g.humans[Number(who.slice(1))];
+      return g.mode === "solo" ? "You" : p ? p.name : "Juror";
     }
-    return null;
+    var j = E.juror(who);
+    return j ? j.short : who;
   }
 
-  // ---------- Home and guide ----------
+  function logHtml(g, log, mineH) {
+    return log.map(function (l) {
+      if (!l.who) return '<li class="sys ' + l.cls + '">' + esc(l.text) + "</li>";
+      var mine = l.who === "h" + mineH;
+      return '<li class="msg' + (mine ? " mine" : "") + '"><b>' + esc(whoName(g, l.who)) + "</b><span>" + esc(l.text) + "</span></li>";
+    }).join("");
+  }
+
+  // ---------- Home, case picker, guide ----------
 
   function renderHome() {
+    var cast = JURORS.map(function (j) {
+      return '<li class="juror-card"><span class="tok-chip">' + esc(E.initials(j.name)) + "</span><div><p><b>" + esc(j.name) + '</b> <span class="muted small">' + esc(j.job) + "</span></p>" +
+        '<p class="muted small">' + esc(j.bio) + "</p></div></li>";
+    }).join("");
+    return '<header class="hero">' +
+      '<p class="eyebrow">Superior Court of Maple County</p>' +
+      "<h1>Jury Duty</h1>" +
+      '<p class="lede">You have been summoned. Take your seat in the jury box, watch the trial unfold, and write down what matters. Then walk into the jury room and argue your way to a verdict.</p>' +
+      "</header>" +
+      '<section class="modes">' +
+      '<button class="mode" data-action="pick" data-mode="solo"><span class="eyebrow">One player</span><b>Play solo</b><span class="muted">Hear a case and argue with five computer jurors.</span></button>' +
+      '<button class="mode" data-action="pick" data-mode="host"><span class="eyebrow">This device is the courtroom</span><b>Host a game</b><span class="muted">Show the trial on a laptop or TV. Friends join on their phones.</span></button>' +
+      '<button class="mode" data-action="join-screen"><span class="eyebrow">Have a game code?</span><b>Join a game</b><span class="muted">Sit on the jury from your phone.</span></button>' +
+      "</section>" +
+      '<section class="how"><div><p class="eyebrow">Step 1</p><h3>Watch the trial</h3><p class="muted">Witnesses take the stand, lawyers question them, and objections fly.</p></div>' +
+      '<div><p class="eyebrow">Step 2</p><h3>Take notes</h3><p class="muted">Your notebook holds ' + E.NOTE_LIMIT + ' facts. Choose carefully, and watch out for evidence the judge throws out.</p></div>' +
+      '<div><p class="eyebrow">Step 3</p><h3>Deliberate</h3><p class="muted">Use your facts to persuade the other jurors. Each one cares about different kinds of evidence.</p></div></section>' +
+      '<section class="panel"><div class="row-head"><h2>The computer jurors</h2><button class="btn-link" data-action="guide">Courtroom basics</button></div><ul class="jurors">' + cast + "</ul></section>";
+  }
+
+  function renderPick() {
+    var host = ui.pickMode === "host";
     var cases = CASES.map(function (c) {
       return '<article class="case-card">' +
         '<div class="case-meta"><span class="tag tag-' + c.kind + '">' + (c.kind === "criminal" ? "Criminal" : "Civil") + "</span>" +
@@ -211,34 +129,20 @@
         '<p class="caption">' + esc(c.caption) + "</p>" +
         "<p>" + esc(c.blurb) + "</p>" +
         '<div class="case-foot"><span class="muted small">' + esc(c.length) + "</span>" +
-        '<button class="btn" data-action="start-case" data-id="' + c.id + '">Hear this case</button></div>' +
+        '<button class="btn" data-action="' + (host ? "host-case" : "start-case") + '" data-id="' + c.id + '">' + (host ? "Host this case" : "Hear this case") + "</button></div>" +
         "</article>";
     }).join("");
-
-    var cast = JURORS.map(function (j) {
-      return '<li class="juror-card"><span class="tok-chip">' + esc(initials(j.name)) + "</span><div><p><b>" + esc(j.name) + '</b> <span class="muted small">' + esc(j.job) + "</span></p>" +
-        '<p class="muted small">' + esc(j.bio) + "</p></div></li>";
-    }).join("");
-
-    return '<header class="hero">' +
-      '<p class="eyebrow">Superior Court of Maple County</p>' +
-      "<h1>Jury Duty</h1>" +
-      '<p class="lede">You have been summoned. Take your seat in the jury box, watch the trial unfold, and write down what matters. Then walk into the jury room and try to bring five strangers to a verdict.</p>' +
-      "</header>" +
-      '<section class="how"><div><p class="eyebrow">Step 1</p><h3>Watch the trial</h3><p class="muted">Witnesses take the stand, lawyers question them, and objections fly.</p></div>' +
-      '<div><p class="eyebrow">Step 2</p><h3>Take notes</h3><p class="muted">Your notebook holds ' + NOTE_LIMIT + ' facts. Choose carefully, and watch out for evidence the judge throws out.</p></div>' +
-      '<div><p class="eyebrow">Step 3</p><h3>Deliberate</h3><p class="muted">Use your notes to persuade the other jurors. Each one cares about different kinds of evidence.</p></div></section>' +
-      '<section><div class="row-head"><h2>Today\'s docket</h2>' +
-      '<button class="btn-link" data-action="guide">Courtroom basics</button></div>' +
-      '<div class="cases">' + cases + "</div></section>" +
-      '<section class="panel"><h2>Your fellow jurors</h2><ul class="jurors">' + cast + "</ul></section>";
+    return '<button class="btn-link back" data-action="home">← Back</button>' +
+      '<header class="page-head"><p class="eyebrow">' + (host ? "Host a game" : "Play solo") + "</p><h1>Today's docket</h1>" +
+      (host ? '<p class="muted">Pick a case. This device becomes the courtroom screen, and you\'ll get a game code for everyone\'s phones. If you\'re playing too, join from your own phone.</p>' : "") +
+      '</header><div class="cases">' + cases + "</div>";
   }
 
   function renderGuide() {
     var items = GLOSSARY.map(function (g) {
       return '<div class="term"><dt>' + esc(g[0]) + "</dt><dd>" + esc(g[1]) + "</dd></div>";
     }).join("");
-    return '<button class="btn-link back" data-action="home">← Back to the docket</button>' +
+    return '<button class="btn-link back" data-action="home">← Back</button>' +
       '<header class="page-head"><p class="eyebrow">Juror handbook</p><h1>Courtroom basics</h1></header>' +
       '<section class="panel"><h2>How a trial goes</h2><ol class="flow">' +
       "<li><b>The judge</b> welcomes the jury and explains the case.</li>" +
@@ -252,12 +156,19 @@
       '<section class="panel"><h2>Words you\'ll hear</h2><dl class="glossary">' + items + "</dl></section>";
   }
 
-  // ---------- Trial ----------
+  // ---------- The courtroom board ----------
 
-  function renderBoard(c) {
-    var cast = castOf(c);
-    var tokens = cast.map(function (p) {
-      return '<g class="tok k-' + p.kind.replace(" ", " k-") + '" data-tok="' + p.id + '"><title>' + esc(p.name) + "</title>" +
+  function renderBoard(c, g) {
+    var court = E.castOf(c).map(function (p) {
+      return { id: p.id, name: p.name, ini: p.ini, kind: p.kind };
+    });
+    var jury = juryPeople(g).map(function (p) {
+      return { id: p.id, name: p.full || p.name, ini: p.ini, kind: p.kind, spot: "j" + p.seat, away: p.human && !p.connected };
+    });
+    var tokens = court.concat(jury).map(function (p) {
+      var spot = p.spot ? SPOTS[p.spot] : null;
+      return '<g class="tok ' + kindClass(p.kind) + (p.away ? " away" : "") + '" data-tok="' + p.id + '"' +
+        (spot ? ' style="transform: translate(' + spot[0] + "px," + spot[1] + 'px)"' : "") + "><title>" + esc(p.name) + "</title>" +
         '<circle class="ring" r="18"></circle><circle class="disc" r="14"></circle>' +
         '<text class="ini" dy="3.5">' + esc(p.ini) + "</text></g>";
     }).join("");
@@ -279,392 +190,823 @@
       tokens + "</svg>";
   }
 
-  function renderTrial(c) {
-    return '<div class="trial">' +
-      '<div class="trial-top"><button class="btn-link" data-action="home">← Leave court</button><span class="docket">' + esc(c.caption) + " · No. " + esc(c.docket) + "</span></div>" +
-      '<div class="trial-grid"><div class="board-wrap">' + renderBoard(c) + '<div class="objection-banner" id="banner">OBJECTION!</div></div>' +
+  function updateBoard(g) {
+    var c = E.findCase(g.caseId);
+    var b = g.beats[g.beat];
+    var board = app.querySelector(".board");
+    if (!board || !b) return;
+    E.castOf(c).forEach(function (p) {
+      var el = board.querySelector('[data-tok="' + p.id + '"]');
+      var spot = SPOTS[b.pos[p.id]] || SPOTS[p.home];
+      el.style.transform = "translate(" + spot[0] + "px," + spot[1] + "px)";
+    });
+    Array.prototype.forEach.call(board.querySelectorAll(".tok"), function (el) {
+      el.classList.toggle("speaking", el.getAttribute("data-tok") === b.who);
+    });
+    var banner = document.getElementById("banner");
+    if (banner) {
+      banner.classList.remove("show");
+      if (b.kind === "objection") { void banner.offsetWidth; banner.classList.add("show"); }
+    }
+  }
+
+  function speechHtml(c, b, extra) {
+    var p = b.who ? E.person(c, b.who) : null;
+    var head = p
+      ? '<p class="who"><span class="tok-chip ' + kindClass(p.kind) + '">' + esc(p.ini) + "</span><span><b>" + esc(p.name) + '</b><span class="muted small">' + esc(p.role) + "</span></span></p>"
+      : '<p class="who guide-who"><span class="eyebrow">What\'s happening</span></p>';
+    var x = b.show ? E.exhibit(c, b.show) : null;
+    var ex = x ? '<figure class="exhibit"><span class="sticker">' + esc(x.label) + "</span><figcaption>" + esc(x.title) + "</figcaption><pre>" + esc(x.body) + "</pre></figure>" : "";
+    return '<div class="speech-box' + (b.who ? "" : " guide") + (b.kind === "objection" ? " objecting" : "") + '">' + head +
+      '<p class="line">' + esc(b.text) + "</p>" + ex + (extra || "") + "</div>";
+  }
+
+  function phaseHtml(b, index, total) {
+    return '<p class="phase">' + esc(b.phase || "") + '<span class="muted small">' + (index + 1) + " / " + total + "</span></p>";
+  }
+
+  function renderCourtroom(c, top) {
+    return '<div class="trial">' + top +
+      '<div class="trial-grid"><div class="board-wrap">' + renderBoard(c, ui.g) + '<div class="objection-banner" id="banner">OBJECTION!</div></div>' +
       '<div class="dialog" id="dialog"></div></div></div>';
   }
 
-  function updateTrial() {
-    var c = currentCase();
-    var b = state.beats[state.beat];
-    var board = app.querySelector(".board");
-    if (!board || !b) return;
+  // ---------- Solo ----------
 
-    castOf(c).forEach(function (p) {
-      var g = board.querySelector('[data-tok="' + p.id + '"]');
-      var spot = SPOTS[b.pos[p.id]] || SPOTS[p.home];
-      g.style.transform = "translate(" + spot[0] + "px," + spot[1] + "px)";
-      g.classList.toggle("speaking", b.who === p.id);
-    });
-
-    var banner = document.getElementById("banner");
-    banner.classList.remove("show");
-    if (b.kind === "objection") { void banner.offsetWidth; banner.classList.add("show"); }
-
-    var p = b.who ? person(c, b.who) : null;
-    var head = p
-      ? '<p class="who"><span class="tok-chip k-' + p.kind.replace(" ", " k-") + '">' + esc(p.ini) + "</span><span><b>" + esc(p.name) + '</b><span class="muted small">' + esc(p.role) + "</span></span></p>"
-      : '<p class="who guide-who"><span class="eyebrow">What\'s happening</span></p>';
-
+  function soloTrialDialog() {
+    var g = ui.g;
+    var c = E.findCase(g.caseId);
+    var b = g.beats[g.beat];
+    var me = g.humans[0];
     var extra = "";
-    if (b.show) {
-      var x = exhibit(c, b.show);
-      if (x) extra += '<figure class="exhibit"><span class="sticker">' + esc(x.label) + "</span><figcaption>" + esc(x.title) + "</figcaption><pre>" + esc(x.body) + "</pre></figure>";
-    }
     if (b.card) {
-      var have = state.notes.indexOf(b.card) >= 0;
-      var full = state.notes.length >= NOTE_LIMIT;
+      var have = me.notebook.indexOf(b.card) >= 0;
+      var full = me.notebook.length >= E.NOTE_LIMIT;
       extra += '<div class="note-row">' + (have
         ? '<span class="noted">Written in your notebook</span>'
         : full
-          ? '<span class="muted small">Your notebook is full. Remove a note to make room.</span>'
+          ? '<span class="muted small">Your notebook is full. Remove a fact to make room.</span>'
           : '<button class="btn note-btn" data-action="note" data-card="' + b.card + '">Write it down</button>') +
         '<span class="card-title">' + esc(c.cards[b.card].title) + "</span></div>";
     }
     if (b.kind === "ask") {
-      var s = c.steps[b.step];
-      if (state.asked) {
-        extra += '<p class="muted small">You have already used your one question.</p>';
-      } else {
-        extra += '<div class="ask">' + s.jurorQuestion.map(function (q, i) {
-          return '<button class="btn ghost ask-btn" data-action="ask" data-i="' + i + '">' + esc(q.q) + "</button>";
-        }).join("") + '<p class="muted small">Or tap Next to skip your question.</p></div>';
-      }
+      if (me.askUsed) extra += '<p class="muted small">You have already used your one question.</p>';
+      else extra += askButtons(c, b) + '<p class="muted small">Or tap Next to skip your question.</p>';
     }
-
-    var last = state.beat === state.beats.length - 1;
-    document.getElementById("dialog").innerHTML =
-      '<p class="phase">' + esc(b.phase || "") + '<span class="muted small">' + (state.beat + 1) + " / " + state.beats.length + "</span></p>" +
-      '<div class="speech-box' + (b.who ? "" : " guide") + (b.kind === "objection" ? " objecting" : "") + '">' + head +
-      '<p class="line">' + esc(b.text) + "</p>" + extra + "</div>" +
+    var last = g.beat === g.beats.length - 1;
+    return phaseHtml(b, g.beat, g.beats.length) + speechHtml(c, b, extra) +
       '<div class="dialog-nav">' +
-      '<button class="btn ghost" data-action="back"' + (state.beat === 0 ? " disabled" : "") + ">Back</button>" +
-      '<button class="btn ghost" data-action="notebook">Notebook ' + state.notes.length + "/" + NOTE_LIMIT + "</button>" +
+      '<button class="btn ghost" data-action="back"' + (g.beat === 0 ? " disabled" : "") + ">Back</button>" +
+      '<button class="btn ghost" data-action="notebook">Notebook ' + me.notebook.length + "/" + E.NOTE_LIMIT + "</button>" +
       '<button class="btn" data-action="advance" id="next-btn">' + (last ? "Go to the jury room" : "Next") + "</button></div>" +
-      (state.showNotebook ? renderNotebook(c) : "");
+      (ui.showNotebook ? notebookHtml(c, me.notebook, true) : "");
   }
 
-  function renderNotebook(c) {
-    var list = state.notes.length
-      ? state.notes.map(function (id) {
-        return '<li><span>' + esc(c.cards[id].title) + '</span><button class="btn-link" data-action="unnote" data-card="' + id + '">Remove</button></li>';
+  function askButtons(c, b) {
+    var s = c.steps[b.step];
+    return '<div class="ask">' + s.jurorQuestion.map(function (q, i) {
+      return '<button class="btn ghost ask-btn" data-action="ask" data-i="' + i + '">' + esc(q.q) + "</button>";
+    }).join("") + "</div>";
+  }
+
+  function notebookHtml(c, notes, removable) {
+    var list = notes.length
+      ? notes.map(function (id) {
+        return "<li><span>" + esc(c.cards[id].title) + "</span>" + (removable ? '<button class="btn-link" data-action="unnote" data-card="' + id + '">Remove</button>' : "") + "</li>";
       }).join("")
       : '<li class="muted">Nothing yet. Tap "Write it down" when a witness says something important.</li>';
     return '<div class="notebook"><p class="eyebrow">Juror notebook</p><ol>' + list + "</ol></div>";
   }
 
-  function askQuestion(i) {
-    var c = currentCase();
-    var b = state.beats[state.beat];
-    var q = c.steps[b.step].jurorQuestion[i];
-    state.asked = true;
-    var base = { pos: b.pos, phase: "Juror question" };
-    state.beats.splice(state.beat + 1, 0,
-      Object.assign({}, base, { who: "judge", text: "A juror asks: \"" + q.q + "\" Please answer the question." }),
-      Object.assign({}, base, { who: b.witness, text: q.a, card: q.card }));
-    state.beat++;
-    updateTrial();
-  }
-
-  // ---------- Deliberation ----------
-
-  function startDeliberation() {
-    var c = currentCase();
-    var d = { leans: Object.assign({}, c.jury.start), round: 1, log: [], used: [], strikes: 0, sel: null, target: null, pi: 0, voting: false, verdict: null, votes: null };
-    state.d = d;
-    say(null, "The six of you file into the jury room and sit around a long table. Ruth volunteers to be the foreperson.");
-    say("ruth", "Let's go around the table and hear everyone's first impression before we argue about anything.");
-    JURORS.forEach(function (j) { say(j.id, c.jury.takes[j.id]); });
-    say(null, "Your turn. Pick a fact from your notebook, then choose who to say it to. Each juror is moved most by certain kinds of evidence: " +
-      JURORS.map(function (j) { return j.short + " by " + j.likes.join(" and "); }).join("; ") +
-      ". You have " + ROUNDS + " turns before the final vote.");
-    state.screen = "deliberate";
-  }
-
-  function say(who, text, cls) {
-    state.d.log.push({ who: who, text: text, cls: cls || "" });
-  }
-
-  function clamp(n) { return Math.max(0, Math.min(100, n)); }
-
-  function mood(c, lean) {
-    var t = threshold(c), w = words(c);
-    if (lean >= t + 12) return { label: w.yes, cls: "m-yes" };
-    if (lean >= t) return { label: "Leaning " + w.yes.toLowerCase(), cls: "m-lean-yes" };
-    if (lean >= t - 15) return { label: "Leaning " + w.no.toLowerCase(), cls: "m-lean-no" };
-    return { label: w.no, cls: "m-no" };
-  }
-
-  function playCard(cardId, target) {
-    var c = currentCase();
-    var d = state.d;
-    var card = c.cards[cardId];
-    var t = threshold(c);
-    d.used.push(cardId);
-    say("you", (target === "all" ? "" : "(to " + juror(target).short + ") ") + card.title + ".");
-    if (card.struck) {
-      d.strikes++;
-      say("ruth", juror("ruth").say.struck);
-      say(null, "The judge told the jury not to use that. Bringing it up makes the other jurors trust you less for the rest of deliberations.", "warn");
-    } else {
-      var cred = Math.pow(0.8, d.strikes);
-      var best = null, bestDelta = 0, before = {};
-      JURORS.forEach(function (j) {
-        before[j.id] = d.leans[j.id];
-        var likes = card.tags.some(function (tag) { return j.likes.indexOf(tag) >= 0; });
-        var share = target === "all" ? 0.5 : j.id === target ? 1 : 0.25;
-        // Guilt has to be proven beyond a reasonable doubt, so it's harder to argue for.
-        var caution = c.kind === "criminal" && card.dir > 0 ? 0.7 : 1;
-        // The further someone already leans your way, the less one more fact moves them.
-        var already = card.dir > 0 ? d.leans[j.id] / 100 : 1 - d.leans[j.id] / 100;
-        var delta = card.dir * card.power * 3.5 * j.sway * cred * caution * (likes ? 1.8 : 1) * (1.3 - already) * share;
-        d.leans[j.id] = clamp(d.leans[j.id] + delta);
-        if (Math.abs(delta) > bestDelta) { bestDelta = Math.abs(delta); best = j.id; }
-      });
-      var r = target === "all" ? best : target;
-      var j = juror(r);
-      var real = Math.abs(d.leans[r] - before[r]);
-      var agrees = (before[r] >= t) === (card.dir > 0);
-      say(r, agrees ? j.say.agree : real >= 8 ? j.say.moved : j.say.unmoved);
-    }
-    d.sel = null;
-    d.target = null;
-    jurorsTalk();
-  }
-
-  function jurorsTalk() {
-    var c = currentCase();
-    var d = state.d;
-    var t = threshold(c);
-    var pts = c.jury.points;
-    for (var tries = 0; tries < pts.length; tries++) {
-      var p = pts[d.pi % pts.length];
-      d.pi++;
-      var side = JURORS.filter(function (j) { return p.dir > 0 ? d.leans[j.id] >= t - 5 : d.leans[j.id] < t + 5; });
-      if (!side.length) continue;
-      side.sort(function (a, b) { return p.dir > 0 ? d.leans[b.id] - d.leans[a.id] : d.leans[a.id] - d.leans[b.id]; });
-      var speaker = side[0];
-      say(speaker.id, p.text);
-      if (p.struck) {
-        var fixer = speaker.id === "ruth" ? "tasha" : "ruth";
-        say(fixer, juror("ruth").say.struck);
-      } else {
-        JURORS.forEach(function (j) {
-          if (j.id !== speaker.id) d.leans[j.id] = clamp(d.leans[j.id] + p.dir * 6 * j.sway);
-        });
-        // Saying it out loud makes the speaker a little more sure of themselves.
-        d.leans[speaker.id] = clamp(d.leans[speaker.id] + p.dir * 4);
-      }
-      break;
-    }
-    d.round++;
-    if (d.round > ROUNDS) {
-      say(null, "Hours have passed. A note arrives from the judge asking whether the jury has reached a verdict. It's time for a final vote.");
-      d.voting = true;
-    }
-  }
-
-  function castVotes(mine) {
-    var c = currentCase();
-    var d = state.d;
-    var w = words(c);
-    var t = threshold(c);
-    var votes = { you: mine };
-    JURORS.forEach(function (j) { votes[j.id] = d.leans[j.id] >= t ? w.yesId : w.noId; });
-    var yes = 0;
-    Object.keys(votes).forEach(function (k) { if (votes[k] === w.yesId) yes++; });
-    var no = 6 - yes;
-    var need = needed(c);
-    d.votes = votes;
-    say(null, "Ruth reads the ballots: " + w.yes + " " + yes + ", " + w.no + " " + no + ".", "tally");
-    d.voting = false;
-    if (yes >= need) d.verdict = w.yesId;
-    else if (no >= need) d.verdict = w.noId;
-    else if (d.round > ROUNDS) d.verdict = "mistrial";
-    else say("ruth", "That's not enough to reach a verdict. We need " + need + " of 6 to agree. Let's keep talking.");
-    if (d.verdict) state.screen = "verdict";
-  }
-
   function tableSeat(i) {
-    // You sit at the bottom of the table; the others go around it.
+    // Seat 1 sits at the bottom of the table; the others go around it.
     var angle = Math.PI / 2 + (i * 2 * Math.PI) / 6;
     return [180 + Math.cos(angle) * 140, 112 + Math.sin(angle) * 84];
   }
 
-  function renderDeliberation(c) {
-    var d = state.d;
-    var people = [{ id: "you", name: "You", ini: "YOU" }].concat(JURORS.map(function (j) { return { id: j.id, name: j.short, ini: initials(j.name) }; }));
-    var seats = people.map(function (p, i) {
+  function tableSvg(g, pickable) {
+    var seats = juryPeople(g).map(function (p, i) {
       var xy = tableSeat(i);
-      var m = p.id === "you" ? { label: "You", cls: "m-you" } : mood(c, d.leans[p.id]);
-      var pickable = p.id !== "you" && d.sel && !d.voting;
-      return '<g class="seat ' + m.cls + (d.target === p.id ? " targeted" : "") + (pickable ? " pickable" : "") + '" transform="translate(' + xy[0].toFixed(1) + " " + xy[1].toFixed(1) + ')"' +
-        (pickable ? ' data-action="target" data-id="' + p.id + '" tabindex="0" role="button" aria-label="Talk to ' + esc(p.name) + '"' : "") + ">" +
+      var m = p.human ? { label: g.mode === "solo" ? "" : p.connected ? "Juror " + (p.seat + 1) : "Away", cls: g.mode === "solo" ? "m-you" : "m-human" } : p.mood;
+      var pick = pickable && !p.human;
+      return '<g class="seat ' + m.cls + (ui.target === p.id ? " targeted" : "") + (pick ? " pickable" : "") + '" transform="translate(' + xy[0].toFixed(1) + " " + xy[1].toFixed(1) + ')"' +
+        (pick ? ' data-action="target" data-id="' + p.id + '" tabindex="0" role="button" aria-label="Talk to ' + esc(p.name) + '"' : "") + ">" +
         '<circle class="ring" r="20"></circle><circle class="disc" r="15"></circle><text class="ini" dy="3.5">' + esc(p.ini) + "</text>" +
-        '<text class="seat-name" y="33">' + esc(p.name) + '</text><text class="seat-mood" y="45">' + esc(p.id === "you" ? "" : m.label) + "</text></g>";
+        '<text class="seat-name" y="33">' + esc(p.name) + '</text><text class="seat-mood" y="45">' + esc(m.label) + "</text></g>";
     }).join("");
-
-    var log = d.log.map(function (l) {
-      if (!l.who) return '<li class="sys ' + l.cls + '">' + esc(l.text) + "</li>";
-      var nm = l.who === "you" ? "You" : juror(l.who).short;
-      return '<li class="msg' + (l.who === "you" ? " mine" : "") + '"><b>' + esc(nm) + "</b><span>" + esc(l.text) + "</span></li>";
-    }).join("");
-
-    var hand = state.notes.filter(function (id) { return d.used.indexOf(id) < 0; });
-    var cards = hand.length ? hand.map(function (id) {
-      var card = c.cards[id];
-      return '<button class="fact' + (d.sel === id ? " selected" : "") + '" data-action="select" data-card="' + id + '" aria-pressed="' + (d.sel === id) + '">' +
-        esc(card.title) + '<span class="fact-tags">' + card.tags.map(esc).join(" · ") + "</span></button>";
-    }).join("") : '<p class="muted small">Your notebook has nothing left to use. You can still listen to the others and vote.</p>';
-
-    var w = words(c);
-    var controls;
-    if (d.voting) {
-      controls = '<div class="vote-box"><p><b>Cast your vote.</b> ' + (c.kind === "criminal" ? "All six must agree." : "Five of six must agree.") + "</p>" +
-        '<div class="vote-btns"><button class="btn" data-action="cast" data-v="' + w.yesId + '">' + w.yes + '</button><button class="btn" data-action="cast" data-v="' + w.noId + '">' + w.no + "</button></div>" +
-        (d.round <= ROUNDS ? '<button class="btn-link" data-action="cancel-vote">Keep talking instead</button>' : "") + "</div>";
-    } else {
-      var targets = '<div class="targets"><span class="muted small">Say it to:</span>' + JURORS.map(function (j) {
-        return '<button class="chip-btn' + (d.target === j.id ? " on" : "") + '" data-action="target" data-id="' + j.id + '"' + (d.sel ? "" : " disabled") + ">" + esc(j.short) + "</button>";
-      }).join("") + '<button class="chip-btn' + (d.target === "all" ? " on" : "") + '" data-action="target" data-id="all"' + (d.sel ? "" : " disabled") + ">Whole table</button></div>";
-      controls = '<div class="hand">' + cards + "</div>" + targets +
-        '<div class="dialog-nav"><button class="btn ghost" data-action="listen">Let others talk</button>' +
-        '<button class="btn ghost" data-action="call-vote">Call a vote</button>' +
-        '<button class="btn" data-action="speak"' + (d.sel && d.target ? "" : " disabled") + ">Make your point</button></div>";
-    }
-
-    return '<div class="trial">' +
-      '<div class="trial-top"><button class="btn-link" data-action="home">← Leave court</button><span class="docket">Jury room · Turn ' + Math.min(d.round, ROUNDS) + " of " + ROUNDS + "</span></div>" +
-      '<div class="trial-grid"><div class="room">' +
-      '<svg class="table-svg" viewBox="0 0 360 252" role="img" aria-label="The jury table">' +
-      '<ellipse class="tabletop" cx="180" cy="112" rx="86" ry="32"></ellipse>' + seats + "</svg>" +
-      '<ol class="log" id="log">' + log + "</ol></div>" +
-      '<div class="dialog"><p class="phase">Your notebook<span class="muted small">' + hand.length + (hand.length === 1 ? " fact" : " facts") + " left</span></p>" + controls + "</div></div></div>";
+    return '<svg class="table-svg" viewBox="0 0 360 252" role="img" aria-label="The jury table">' +
+      '<ellipse class="tabletop" cx="180" cy="112" rx="86" ry="32"></ellipse>' + seats + "</svg>";
   }
 
-  function renderVerdict(c) {
-    var d = state.d;
-    var w = words(c);
-    var v = d.verdict;
-    var title = v === "mistrial" ? "Hung jury" : v === w.yesId ? w.yes : w.no;
+  function handHtml(c, notes, used) {
+    var hand = notes.filter(function (id) { return used.indexOf(id) < 0; });
+    var cards = hand.length ? hand.map(function (id) {
+      var card = c.cards[id];
+      return '<button class="fact' + (ui.sel === id ? " selected" : "") + '" data-action="select" data-card="' + id + '" aria-pressed="' + (ui.sel === id) + '">' +
+        esc(card.title) + '<span class="fact-tags">' + card.tags.map(esc).join(" · ") + "</span></button>";
+    }).join("") : '<p class="muted small">Your notebook has nothing left to use. You can still listen to the others and vote.</p>';
+    return { count: hand.length, html: '<div class="hand">' + cards + "</div>" };
+  }
+
+  function targetsHtml(ids) {
+    return '<div class="targets"><span class="muted small">Say it to:</span>' + ids.map(function (id) {
+      return '<button class="chip-btn' + (ui.target === id ? " on" : "") + '" data-action="target" data-id="' + id + '"' + (ui.sel ? "" : " disabled") + ">" + esc(E.juror(id).short) + "</button>";
+    }).join("") + '<button class="chip-btn' + (ui.target === "all" ? " on" : "") + '" data-action="target" data-id="all"' + (ui.sel ? "" : " disabled") + ">Whole table</button></div>";
+  }
+
+  function voteButtons(c) {
+    var w = E.words(c);
+    return '<div class="vote-btns"><button class="btn" data-action="cast" data-v="' + w.yesId + '">' + w.yes + '</button><button class="btn" data-action="cast" data-v="' + w.noId + '">' + w.no + "</button></div>";
+  }
+
+  function renderSoloDeliberation() {
+    var g = ui.g;
+    var c = E.findCase(g.caseId);
+    var d = g.d;
+    var me = g.humans[0];
+    var hand = handHtml(c, me.notebook, me.used);
+    var controls;
+    if (d.voting) {
+      controls = '<div class="vote-box"><p><b>Cast your vote.</b> ' + (c.kind === "criminal" ? "All six must agree." : "Five of six must agree.") + "</p>" + voteButtons(c) +
+        (d.round <= E.ROUNDS ? '<button class="btn-link" data-action="cancel-vote">Keep talking instead</button>' : "") + "</div>";
+    } else {
+      controls = hand.html + targetsHtml(d.computers) +
+        '<div class="dialog-nav"><button class="btn ghost" data-action="listen">Let others talk</button>' +
+        '<button class="btn ghost" data-action="call-vote">Call a vote</button>' +
+        '<button class="btn" data-action="speak"' + (ui.sel && ui.target ? "" : " disabled") + ">Make your point</button></div>";
+    }
+    return '<div class="trial">' +
+      '<div class="trial-top"><button class="btn-link" data-action="home">← Leave court</button><span class="docket">Jury room · Turn ' + Math.min(d.round, E.ROUNDS) + " of " + E.ROUNDS + "</span></div>" +
+      '<div class="trial-grid"><div class="room">' + tableSvg(g, !!ui.sel && !d.voting) +
+      '<ol class="log" id="log">' + logHtml(g, d.log, 0) + "</ol></div>" +
+      '<div class="dialog"><p class="phase">Your notebook<span class="muted small">' + hand.count + (hand.count === 1 ? " fact" : " facts") + " left</span></p>" + controls + "</div></div></div>";
+  }
+
+  function truthHtml(c) {
+    return '<section class="panel"><p class="eyebrow">What really happened</p><h2>' + esc(c.truth.headline) + "</h2><p>" + esc(c.truth.story) + "</p></section>" +
+      '<section class="panel tip"><h2>What this case teaches</h2><p>' + esc(c.truth.lesson) + "</p></section>";
+  }
+
+  function verdictTitle(c, v) {
+    var w = E.words(c);
+    return v === "mistrial" ? "Hung jury" : v === w.yesId ? w.yes : w.no;
+  }
+
+  function reportHtml(rows) {
+    return '<ul class="report">' + rows.map(function (r) {
+      return '<li class="' + (r.ok ? "ok" : "miss") + '"><b>' + esc(r.title) + "</b><span>" + esc(r.text) + "</span></li>";
+    }).join("") + "</ul>";
+  }
+
+  function renderSoloVerdict() {
+    var g = ui.g;
+    var c = E.findCase(g.caseId);
+    var w = E.words(c);
+    var d = g.d;
     var vw = function (id) { return id === w.yesId ? w.yes : w.no; };
-    var ballots = ["you"].concat(JURORS.map(function (j) { return j.id; })).map(function (id, i) {
-      return '<li class="vote-card" style="animation-delay:' + (i * 0.3) + 's"><b>' + (id === "you" ? "You" : juror(id).short) + "</b>" + vw(d.votes[id]) + "</li>";
+    var ballots = [{ name: "You", v: g.humans[0].lastBallot }].concat(d.computers.map(function (id) {
+      return { name: E.juror(id).short, v: d.tally.computers[id] };
+    })).map(function (b, i) {
+      return '<li class="vote-card" style="animation-delay:' + (i * 0.3) + 's"><b>' + esc(b.name) + "</b>" + vw(b.v) + "</li>";
     }).join("");
-
-    var usable = Object.keys(c.cards).filter(function (k) { return !c.cards[k].struck; }).length;
-    var good = state.notes.filter(function (k) { return !c.cards[k].struck; }).length;
-    var badNotes = state.notes.filter(function (k) { return c.cards[k].struck; }).length;
-    var lawful = v === c.truth.lawful;
-    var actual = v === c.truth.actual;
-    var report = [
-      ["Followed the law", v === "mistrial" ? "No verdict. The case would be tried again with a new jury." : lawful ? "Yes. Under the judge's instructions, the evidence supports this verdict." : "No. Under the judge's instructions, the evidence pointed the other way.", v !== "mistrial" && lawful],
-      ["Matched what really happened", v === "mistrial" ? "No verdict." : actual ? "Yes." : "No. See what really happened, above.", v !== "mistrial" && actual],
-      ["Notes taken", good + " useful facts written down" + (badNotes ? ", plus " + badNotes + " the judge threw out" : "") + ". You asked " + (state.asked ? "one" : "no") + " juror question.", good >= 5 && !badNotes],
-      ["Played by the rules", d.strikes ? "You used thrown-out evidence " + d.strikes + (d.strikes === 1 ? " time." : " times.") : "You only argued with admitted evidence.", !d.strikes]
-    ].map(function (r) {
-      return '<li class="' + (r[2] ? "ok" : "miss") + '"><b>' + r[0] + "</b><span>" + esc(r[1]) + "</span></li>";
-    }).join("");
-
-    return '<header class="page-head verdict"><p class="eyebrow">' + esc(c.caption) + " · The foreperson reads the verdict</p><h1>" + title + "</h1>" +
-      (v === "mistrial" ? "<p>The jury couldn't reach the required agreement, so the judge declares a mistrial.</p>" : "") + "</header>" +
+    return '<header class="page-head verdict"><p class="eyebrow">' + esc(c.caption) + " · The foreperson reads the verdict</p><h1>" + verdictTitle(c, d.verdict) + "</h1>" +
+      (d.verdict === "mistrial" ? "<p>The jury couldn't reach the required agreement, so the judge declares a mistrial.</p>" : "") + "</header>" +
       '<section class="panel"><p class="muted small">The ballots</p><ol class="votes">' + ballots + "</ol></section>" +
-      '<section class="panel"><p class="eyebrow">What really happened</p><h2>' + esc(c.truth.headline) + "</h2><p>" + esc(c.truth.story) + "</p></section>" +
-      '<section class="panel tip"><h2>What this case teaches</h2><p>' + esc(c.truth.lesson) + "</p></section>" +
-      '<section class="panel"><h2>Your jury service</h2><ul class="report">' + report + "</ul></section>" +
-      '<nav class="nav"><button class="btn ghost" data-action="start-case" data-id="' + c.id + '">Retry this case</button><button class="btn" data-action="home">Back to the docket</button></nav>';
+      truthHtml(c) +
+      '<section class="panel"><h2>Your jury service</h2>' + reportHtml(E.report(g, 0)) + "</section>" +
+      '<nav class="nav"><button class="btn ghost" data-action="start-case" data-id="' + c.id + '">Retry this case</button><button class="btn" data-action="home">Back to home</button></nav>';
+  }
+
+  function renderSolo() {
+    var g = ui.g;
+    var c = E.findCase(g.caseId);
+    if (g.phase === "trial") {
+      return renderCourtroom(c, '<div class="trial-top"><button class="btn-link" data-action="home">← Leave court</button><span class="docket">' + esc(c.caption) + " · No. " + esc(c.docket) + "</span></div>");
+    }
+    if (g.phase === "deliberation") return renderSoloDeliberation();
+    return renderSoloVerdict();
+  }
+
+  function soloAct(a) {
+    var before = ui.g.phase;
+    if (!E.apply(ui.g, 0, a)) return;
+    if (ui.g.phase === "trial") {
+      document.getElementById("dialog").innerHTML = soloTrialDialog();
+      updateBoard(ui.g);
+    } else if (ui.g.phase === before) {
+      render();
+    } else {
+      go("solo");
+    }
+  }
+
+  // ---------- Hosting: the courtroom screen ----------
+
+  function hostTop(c) {
+    var g = ui.g;
+    var fore = g.humans[g.foreperson];
+    var live = g.humans.filter(function (p) { return p.connected; }).length;
+    return '<div class="trial-top"><button class="btn-link" data-action="end-game">End game</button>' +
+      '<span class="docket">' + esc(c.caption) + " · Code <b class=\"code-inline\">" + esc(ui.code || "----") + "</b> · " +
+      live + " of " + g.humans.length + " jurors connected" + (fore ? " · Foreperson: " + esc(fore.name) : "") + "</span></div>";
+  }
+
+  function joinLink() {
+    return location.origin + location.pathname + location.search + "#join-" + (ui.code || "");
+  }
+
+  function renderLobby(c) {
+    var g = ui.g;
+    var people = juryPeople(g).map(function (p) {
+      return '<li class="lobby-seat' + (p.human ? " human" : "") + '"><span class="tok-chip ' + kindClass(p.kind) + '">' + esc(p.ini) + "</span><span><b>" + esc(p.name) + "</b>" +
+        '<span class="muted small">' + (p.human ? "Juror " + (p.seat + 1) + (p.seat === g.foreperson ? " · Foreperson" : "") + (p.connected ? "" : " · Away") : "Computer juror") + "</span></span></li>";
+    }).join("");
+    var body = ui.hostError
+      ? '<div class="panel warn-panel"><h2>Couldn\'t open the courtroom</h2><p>' + esc(ui.hostError) + '</p><button class="btn" data-action="home">Back to home</button></div>'
+      : '<section class="lobby-code"><p class="eyebrow">Game code</p><p class="code">' + esc(ui.code || "····") + "</p>" +
+        '<p>On your phone, open <b class="link-text">' + esc(location.host + location.pathname) + "</b> and tap <b>Join a game</b>, or go straight to:</p>" +
+        '<p class="link-text small">' + esc(ui.code ? joinLink() : "Starting…") + "</p></section>" +
+        '<section class="panel"><h2>The jury</h2><p class="muted small">Up to six people can join. Computer jurors fill the empty seats.</p><ul class="lobby-seats">' + people + "</ul>" +
+        '<p class="muted">' + (g.humans.length ? "Waiting for the foreperson to tap <b>Start trial</b> on their phone." : "Waiting for the first juror to join. They'll be the foreperson.") + "</p></section>";
+    return '<div class="trial-top"><button class="btn-link" data-action="end-game">End game</button><span class="docket">' + esc(c.caption) + "</span></div>" +
+      '<header class="page-head"><p class="eyebrow">Host a game</p><h1>' + esc(c.title) + "</h1></header>" + body;
+  }
+
+  function hostTrialDialog() {
+    var g = ui.g;
+    var c = E.findCase(g.caseId);
+    var b = g.beats[g.beat];
+    var extra = "";
+    if (b.card) extra += '<div class="note-row"><span class="card-title">Jurors can write this down: ' + esc(c.cards[b.card].title) + "</span></div>";
+    if (b.kind === "ask") {
+      extra += '<p class="muted small">' + (b.askedBy !== undefined
+        ? esc(g.humans[b.askedBy].name) + " sent a question."
+        : "Each juror can send one question from their phone during the trial. The first one sent is asked.") + "</p>";
+    }
+    var last = g.beat === g.beats.length - 1;
+    return phaseHtml(b, g.beat, g.beats.length) + speechHtml(c, b, extra) +
+      '<div class="dialog-nav"><button class="btn ghost" data-action="host-back"' + (g.beat === 0 ? " disabled" : "") + ">Back</button>" +
+      '<button class="btn" data-action="host-advance">' + (last ? "Go to the jury room" : "Next") + "</button></div>" +
+      '<p class="muted small">The foreperson moves the trial along from their phone. The space bar works here too.</p>';
+  }
+
+  function renderHostDeliberation(c) {
+    var g = ui.g;
+    var d = g.d;
+    var status = g.humans.map(function (p, h) {
+      var done = d.voting ? p.ballot : p.choice;
+      return '<li class="' + (done ? "done" : "") + (p.connected ? "" : " away") + '"><b>' + esc(p.name) + "</b><span>" +
+        (!p.connected ? "Away" : done ? (d.voting ? "Voted" : "Ready") : d.voting ? "Voting…" : "Choosing…") + (h === g.foreperson ? " · Foreperson" : "") + "</span></li>";
+    }).join("");
+    return '<div class="trial">' + hostTop(c) +
+      '<div class="trial-grid"><div class="room">' + tableSvg(g, false) + "</div>" +
+      '<div class="dialog"><p class="phase">' + (d.voting ? "Secret ballot" : "Jury room · Turn " + Math.min(d.round, E.ROUNDS) + " of " + E.ROUNDS) + "</p>" +
+      '<ul class="status-list">' + status + "</ul>" +
+      '<ol class="log" id="log">' + logHtml(g, d.log, -1) + "</ol></div></div></div>";
+  }
+
+  function renderHostVerdict(c) {
+    var g = ui.g;
+    var w = E.words(c);
+    var d = g.d;
+    var t = d.tally;
+    var comp = d.computers.map(function (id, i) {
+      return '<li class="vote-card" style="animation-delay:' + (i * 0.3) + 's"><b>' + esc(E.juror(id).short) + "</b>" + (t.computers[id] === w.yesId ? w.yes : w.no) + "</li>";
+    }).join("");
+    return hostTop(c) +
+      '<header class="page-head verdict"><p class="eyebrow">' + esc(c.caption) + " · The foreperson reads the verdict</p><h1>" + verdictTitle(c, d.verdict) + "</h1>" +
+      (d.verdict === "mistrial" ? "<p>The jury couldn't reach the required agreement, so the judge declares a mistrial.</p>" : "") + "</header>" +
+      '<section class="panel"><p class="muted small">The ballots</p>' +
+      '<p class="tally">Human jurors (secret ballot): ' + w.yes + " " + t.humanYes + " · " + w.no + " " + t.humanNo + "</p>" +
+      (comp ? '<ol class="votes">' + comp + "</ol>" : "") + "</section>" +
+      truthHtml(c) +
+      '<p class="muted">Each juror\'s report card is on their phone.</p>' +
+      '<nav class="nav"><button class="btn" data-action="end-game">End game</button></nav>';
+  }
+
+  function renderHost() {
+    var g = ui.g;
+    var c = E.findCase(g.caseId);
+    if (g.phase === "lobby") return renderLobby(c);
+    if (g.phase === "trial") return renderCourtroom(c, hostTop(c));
+    if (g.phase === "deliberation") return renderHostDeliberation(c);
+    return renderHostVerdict(c);
+  }
+
+  function hostSignature() {
+    var g = ui.g;
+    return [g.phase, ui.code, ui.hostError, g.foreperson].concat(g.humans.map(function (p) { return p.name + (p.connected ? "+" : "-"); })).join("|");
+  }
+
+  function startHost(caseId) {
+    stopHost();
+    ui.g = E.createGame(caseId, "multi");
+    ui.code = null;
+    ui.hostError = null;
+    ui.conns = [];
+    go("host");
+    ui.host = Net.host({
+      onReady: function (code) { ui.code = code; hostChanged(); },
+      onConnection: function (conn) {
+        var entry = { conn: conn, h: -1, seen: Date.now() };
+        ui.conns.push(entry);
+        conn.onMessage(function (m) { hostMessage(entry, m); });
+        conn.onClose(function () { hostDropped(entry); });
+      },
+      onError: function (type) {
+        ui.hostError = type === "load"
+          ? "The connection library couldn't load. Check your internet connection and try again."
+          : type === "network" || type === "server-error" || type === "socket-error"
+            ? "Couldn't reach the service that connects phones to this screen. Check your internet connection and try again."
+            : "Something went wrong while opening the courtroom (" + type + "). Try again.";
+        hostChanged();
+      }
+    });
+  }
+
+  function stopHost() {
+    if (!ui.host) return;
+    ui.conns.forEach(function (e) { e.conn.send({ type: "ended" }); e.conn.close(); });
+    ui.conns = [];
+    ui.host.stop();
+    ui.host = null;
+  }
+
+  function hostMessage(entry, m) {
+    var g = ui.g;
+    if (!g || !m) return;
+    entry.seen = Date.now();
+    if (m.type === "ping") { entry.conn.send({ type: "pong" }); return; }
+    if (m.type === "hello") {
+      var res = E.join(g, m.name, m.token);
+      if (res.error) {
+        entry.conn.send({ type: "reject", reason: res.error });
+        return;
+      }
+      // A juror reconnecting from a new connection replaces the old one.
+      ui.conns.forEach(function (e) { if (e !== entry && e.h === res.h) { e.h = -1; e.conn.close(); } });
+      entry.h = res.h;
+      entry.conn.send({ type: "welcome", h: res.h });
+      hostChanged();
+      return;
+    }
+    if (m.type === "action" && entry.h >= 0 && E.apply(g, entry.h, m.action)) hostChanged();
+  }
+
+  function hostDropped(entry) {
+    ui.conns = ui.conns.filter(function (e) { return e !== entry; });
+    if (!ui.g || entry.h < 0) return;
+    var still = ui.conns.some(function (e) { return e.h === entry.h; });
+    if (!still && E.setConnected(ui.g, entry.h, false)) hostChanged();
+  }
+
+  function hostChanged() {
+    var g = ui.g;
+    if (!g || ui.screen !== "host") return;
+    ui.conns.forEach(function (e) { if (e.h >= 0) e.conn.send({ type: "view", view: E.viewFor(g, e.h) }); });
+    var sig = hostSignature();
+    if (sig !== ui.sig || g.phase !== "trial") {
+      ui.sig = sig;
+      render();
+    } else {
+      document.getElementById("dialog").innerHTML = hostTrialDialog();
+      updateBoard(g);
+    }
+  }
+
+  function hostAct(a) {
+    if (ui.g && E.apply(ui.g, -1, a)) hostChanged();
+  }
+
+  // Drop phones that have gone quiet (a locked screen often closes silently).
+  setInterval(function () {
+    if (ui.screen !== "host") return;
+    var now = Date.now();
+    ui.conns.slice().forEach(function (e) { if (now - e.seen > 15000) e.conn.close(); });
+  }, 5000);
+
+  window.addEventListener("pagehide", function () {
+    if (ui.screen === "host") stopHost();
+    else if (ui.phone) phoneStop();
+  });
+
+  // ---------- Joining: the juror's phone ----------
+
+  function renderJoin() {
+    var saved = readJoin();
+    var code = ui.joinCode || (saved && saved.code) || "";
+    var name = saved && saved.code === code ? saved.name : "";
+    return '<button class="btn-link back" data-action="home">← Back</button>' +
+      '<header class="page-head"><p class="eyebrow">Join a game</p><h1>Take your seat</h1>' +
+      '<p class="muted">Enter the game code shown on the courtroom screen.</p></header>' +
+      '<form class="panel join-form" data-action="join-form">' +
+      '<label for="join-code">Game code</label><input id="join-code" class="code-input" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" value="' + esc(code) + '" placeholder="ABCD">' +
+      '<label for="join-name">Your name</label><input id="join-name" maxlength="' + E.NAME_MAX + '" autocomplete="nickname" value="' + esc(name) + '" placeholder="Your name">' +
+      (ui.phoneError ? '<p class="error-text" role="alert">' + esc(ui.phoneError) + "</p>" : "") +
+      '<button class="btn" type="submit">Join the jury</button></form>';
+  }
+
+  function phoneSend(action) {
+    if (ui.phone && ui.phone.conn) ui.phone.conn.send({ type: "action", action: action });
+  }
+
+  function phoneConnect(code, name, token) {
+    phoneStop();
+    var attempt = { conn: null, done: false };
+    ui.phone = attempt;
+    ui.phoneStatus = ui.view ? "reconnecting" : "connecting";
+    ui.lastHeard = Date.now();
+    if (ui.screen !== "phone") go("phone"); else render();
+    attempt.handle = Net.join(code, {
+      onOpen: function (conn) {
+        if (ui.phone !== attempt) { conn.close(); return; }
+        attempt.conn = conn;
+        conn.onMessage(function (m) { if (ui.phone === attempt) phoneMessage(m); });
+        conn.onClose(function () { if (ui.phone === attempt) phoneLost(); });
+        conn.send({ type: "hello", name: name, token: token });
+      },
+      onError: function (type) {
+        if (ui.phone !== attempt) return;
+        if (type === "peer-unavailable") {
+          if (ui.view) phoneEnded("The courtroom screen disconnected. The game has ended.");
+          else { phoneStop(); ui.phoneError = "There's no game with code " + code + ". Check the code on the courtroom screen."; go("join"); }
+        } else if (type === "load") {
+          phoneStop(); ui.phoneError = "The connection library couldn't load. Check your internet connection and try again."; go("join");
+        } else {
+          phoneLost();
+        }
+      }
+    });
+  }
+
+  function phoneStop() {
+    var p = ui.phone;
+    ui.phone = null;
+    if (p) { p.done = true; if (p.conn) p.conn.close(); if (p.handle) p.handle.stop(); }
+  }
+
+  function phoneMessage(m) {
+    ui.lastHeard = Date.now();
+    ui.retries = 0;
+    if (m.type === "welcome") {
+      ui.phoneStatus = "joined";
+      var saved = readJoin();
+      try { if (saved) history.replaceState(null, "", location.pathname + location.search + "#join-" + saved.code); } catch (e) {}
+      keepAwake();
+      render();
+    }
+    else if (m.type === "view") { ui.view = m.view; ui.phoneStatus = "joined"; renderPhoneKeepScroll(); }
+    else if (m.type === "reject") { phoneStop(); ui.view = null; ui.phoneError = m.reason; go("join"); }
+    else if (m.type === "ended") phoneEnded("The host ended the game.");
+  }
+
+  function phoneLost() {
+    var saved = readJoin();
+    phoneStop();
+    if (!saved || ui.phoneStatus === "ended") return;
+    ui.retries++;
+    if (ui.retries > 8) { ui.phoneStatus = "lost"; render(); return; }
+    ui.phoneStatus = "reconnecting";
+    render();
+    setTimeout(function () {
+      if (ui.screen === "phone" && ui.phoneStatus === "reconnecting" && !ui.phone) phoneConnect(saved.code, saved.name, saved.token);
+    }, 2000);
+  }
+
+  function phoneEnded(text) {
+    phoneStop();
+    ui.phoneStatus = "ended";
+    ui.phoneError = text;
+    render();
+  }
+
+  // The phone pings the courtroom screen and notices when it goes quiet.
+  setInterval(function () {
+    if (ui.screen !== "phone" || !ui.phone || !ui.phone.conn) return;
+    ui.phone.conn.send({ type: "ping" });
+    if (Date.now() - ui.lastHeard > 15000) phoneLost();
+  }, 5000);
+
+  var wakeLock = null;
+  function keepAwake() {
+    try {
+      if (navigator.wakeLock && !wakeLock) {
+        navigator.wakeLock.request("screen").then(function (l) {
+          wakeLock = l;
+          l.addEventListener("release", function () { wakeLock = null; });
+        }, function () {});
+      }
+    } catch (e) {}
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState !== "visible" || ui.screen !== "phone") return;
+    keepAwake();
+    if (ui.phone && ui.phone.conn) ui.phone.conn.send({ type: "ping" });
+  });
+
+  function phoneHeader(v, c) {
+    var me = v.me;
+    return '<div class="phone-top"><span class="tok-chip k-human">' + esc(E.initials(me.name)) + "</span><span><b>" + esc(me.name) + '</b><span class="muted small">Juror ' + (me.h + 1) +
+      (v.foreperson === me.h ? " · Foreperson" : "") + " · " + esc(c.caption) + "</span></span></div>";
+  }
+
+  function renderPhone() {
+    var v = ui.view;
+    if (ui.phoneStatus === "ended" || ui.phoneStatus === "lost") {
+      return '<section class="panel"><h2>' + (ui.phoneStatus === "lost" ? "Lost connection" : "Game over") + "</h2><p>" +
+        esc(ui.phoneStatus === "lost" ? "Couldn't reach the courtroom screen. Make sure it's still open, then rejoin." : ui.phoneError) + "</p>" +
+        '<div class="dialog-nav">' + (ui.phoneStatus === "lost" ? '<button class="btn" data-action="rejoin">Rejoin</button>' : "") +
+        '<button class="btn ghost" data-action="home">Back to home</button></div></section>';
+    }
+    if (!v) {
+      return '<section class="panel"><h2>' + (ui.phoneStatus === "reconnecting" ? "Reconnecting…" : "Joining…") + '</h2><p class="muted">Connecting to the courtroom screen.</p>' +
+        '<button class="btn ghost" data-action="leave-game">Cancel</button></section>';
+    }
+    var c = E.findCase(v.caseId);
+    var fore = v.foreperson === v.me.h;
+    var banner = ui.phoneStatus === "reconnecting" ? '<p class="reconnect">Reconnecting to the courtroom screen…</p>' : "";
+    var body;
+    if (v.phase === "lobby") body = phoneLobby(v, fore);
+    else if (v.phase === "trial") body = phoneTrial(v, c, fore);
+    else if (v.phase === "deliberation") body = phoneDeliberation(v, c, fore);
+    else body = phoneVerdict(v, c);
+    return banner + phoneHeader(v, c) + body;
+  }
+
+  function phoneLobby(v, fore) {
+    var names = v.humans.map(function (p, i) { return "<li>Juror " + (i + 1) + ": " + esc(p.name) + (p.connected ? "" : " (away)") + "</li>"; }).join("");
+    return '<section class="panel"><h2>You\'re Juror ' + (v.me.h + 1) + "</h2>" +
+      (fore ? "<p>You're the <b>foreperson</b>. You'll move the trial along, call votes and close turns. Start when everyone has joined.</p>" : "<p>Waiting for the foreperson to start the trial.</p>") +
+      '<ul class="plain">' + names + "</ul>" +
+      (fore ? '<button class="btn" data-action="m-start">Start trial</button>' : "") + "</section>" +
+      '<button class="btn-link" data-action="leave-game">Leave game</button>';
+  }
+
+  function phoneTrial(v, c, fore) {
+    var b = v.beat;
+    var me = v.me;
+    var p = b.who ? E.person(c, b.who) : null;
+    var line = '<div class="speech-box' + (b.who ? "" : " guide") + '"><p class="muted small">' + esc(b.phase || "") + "</p>" +
+      (p ? "<p><b>" + esc(p.name) + '</b> <span class="muted small">' + esc(p.role) + "</span></p>" : '<p class="eyebrow">What\'s happening</p>') +
+      '<p class="line">' + esc(b.text) + "</p></div>";
+    var controls = fore
+      ? '<div class="dialog-nav"><button class="btn ghost" data-action="m-back"' + (v.beatIndex === 0 ? " disabled" : "") + ">Back</button>" +
+        '<button class="btn" data-action="m-advance">' + (v.beatIndex === v.beatsLen - 1 ? "Go to the jury room" : "Next") + "</button></div>"
+      : "";
+    var full = me.notebook.length >= E.NOTE_LIMIT;
+    var avail = me.available.filter(function (id) { return me.notebook.indexOf(id) < 0; });
+    var facts = avail.length
+      ? '<section class="panel"><p class="eyebrow">From this testimony</p><ul class="fact-list">' + avail.map(function (id) {
+        return "<li><span>" + esc(c.cards[id].title) + "</span>" + (full ? "" : '<button class="btn note-btn" data-action="m-write" data-card="' + id + '">Write it down</button>') + "</li>";
+      }).join("") + "</ul>" + (full ? '<p class="muted small">Your notebook is full. Remove a fact to make room.</p>' : "") + "</section>"
+      : "";
+    var ask = "";
+    if (b.kind === "ask" && b.askedBy === undefined && !me.askUsed) {
+      var s = c.steps[b.step];
+      ask = '<section class="panel"><p class="eyebrow">Your juror question</p><p class="muted small">You get one question this trial. The first juror to send one gets it asked.</p><div class="ask">' +
+        s.jurorQuestion.map(function (q, i) { return '<button class="btn ghost ask-btn" data-action="m-ask" data-i="' + i + '">' + esc(q.q) + "</button>"; }).join("") + "</div></section>";
+    }
+    return line + controls + ask + facts + notebookHtml(c, me.notebook, true).replace("Juror notebook", "Your notebook " + me.notebook.length + "/" + E.NOTE_LIMIT);
+  }
+
+  function phoneDeliberation(v, c, fore) {
+    var d = v.d;
+    var me = v.me;
+    var moods = v.computers.map(function (id) {
+      var m = d.moods[id];
+      return '<li class="' + m.cls + '"><b>' + esc(E.juror(id).short) + "</b><span>" + esc(m.label) + "</span></li>";
+    }).join("");
+    var live = v.humans.filter(function (p) { return p.connected; });
+    var recent = d.log.slice(-4);
+    var g = { mode: "multi", humans: v.humans };
+    var parts = [];
+    parts.push('<p class="phase">' + (d.voting ? "Secret ballot" : "Jury room · Turn " + Math.min(d.round, E.ROUNDS) + " of " + E.ROUNDS) + "</p>");
+    if (moods) parts.push('<ul class="mood-list">' + moods + "</ul>");
+    parts.push('<ol class="log short">' + logHtml(g, recent, me.h) + "</ol>");
+    if (d.voting) {
+      var votedCount = live.filter(function (p) { return p.voted; }).length;
+      parts.push(me.ballot
+        ? '<div class="vote-box"><p><b>Ballot cast.</b> Waiting for the others (' + votedCount + " of " + live.length + ").</p></div>"
+        : '<div class="vote-box"><p><b>Cast your secret ballot.</b> ' + (c.kind === "criminal" ? "All six must agree." : "Five of six must agree.") + "</p>" + voteButtons(c) + "</div>");
+      if (fore && d.round <= E.ROUNDS) parts.push('<button class="btn-link" data-action="m-cancel-vote">Keep talking instead</button>');
+    } else {
+      var chosenCount = live.filter(function (p) { return p.chosen; }).length;
+      if (me.choice && !ui.editing) {
+        var said = me.choice.fact ? "You'll say: " + c.cards[me.choice.fact].title + (me.choice.target === "all" ? " (to the whole table)" : " (to " + E.juror(me.choice.target).short + ")") : "You'll let the others talk.";
+        parts.push('<div class="vote-box"><p>' + esc(said) + "</p><p class=\"muted small\">Waiting for the others (" + chosenCount + " of " + live.length + ').</p><button class="btn-link" data-action="m-change">Change my choice</button></div>');
+      } else {
+        var hand = handHtml(c, me.notebook, me.used);
+        parts.push(hand.html + (v.computers.length ? targetsHtml(v.computers) : ""));
+        parts.push('<div class="dialog-nav"><button class="btn ghost" data-action="m-pass">Let others talk</button>' +
+          '<button class="btn" data-action="m-speak"' + (ui.sel && (ui.target || !v.computers.length) ? "" : " disabled") + ">Make your point</button></div>");
+      }
+      if (fore) {
+        parts.push('<div class="panel fore-tools"><p class="eyebrow">Foreperson</p><div class="dialog-nav">' +
+          '<button class="btn ghost" data-action="m-close-turn">Close this turn</button><button class="btn ghost" data-action="m-call-vote">Call a vote</button></div>' +
+          '<p class="muted small">Closing the turn counts anyone who hasn\'t chosen as letting others talk.</p></div>');
+      }
+    }
+    return parts.join("");
+  }
+
+  function phoneVerdict(v, c) {
+    return '<header class="page-head verdict"><p class="eyebrow">The verdict</p><h1>' + verdictTitle(c, v.d.verdict) + "</h1></header>" +
+      '<section class="panel"><h2>Your report card</h2>' + reportHtml(v.me.report) + "</section>" +
+      '<p class="muted">The true story is on the courtroom screen.</p>' +
+      '<button class="btn ghost" data-action="leave-game">Leave game</button>';
+  }
+
+  function renderPhoneKeepScroll() {
+    var y = window.scrollY;
+    render();
+    window.scrollTo(0, y);
   }
 
   // ---------- Rendering and events ----------
 
-  function render() {
-    var c = currentCase();
-    var html;
-    switch (state.screen) {
-      case "guide": html = renderGuide(); break;
-      case "trial": html = renderTrial(c); break;
-      case "deliberate": html = renderDeliberation(c); break;
-      case "verdict": html = renderVerdict(c); break;
-      default: html = renderHome();
-    }
-    app.innerHTML = '<main class="wrap screen-' + state.screen + '">' + html + "</main>";
-    if (state.screen === "trial") updateTrial();
+  function scrollLog() {
     var log = document.getElementById("log");
     if (log) log.scrollTop = log.scrollHeight;
   }
 
+  var lastHtml = "", pointerDown = false, pendingRender = false;
+  app.addEventListener("pointerdown", function () { pointerDown = true; });
+  document.addEventListener("pointerup", releasePointer);
+  document.addEventListener("pointercancel", releasePointer);
+  function releasePointer() {
+    pointerDown = false;
+    if (pendingRender) { pendingRender = false; setTimeout(renderPhoneKeepScroll, 0); }
+  }
+
+  function render() {
+    var html;
+    switch (ui.screen) {
+      case "pick": html = renderPick(); break;
+      case "guide": html = renderGuide(); break;
+      case "solo": html = renderSolo(); break;
+      case "host": html = renderHost(); break;
+      case "join": html = renderJoin(); break;
+      case "phone": html = renderPhone(); break;
+      default: html = renderHome();
+    }
+    var wide = (ui.screen === "solo" || ui.screen === "host") && ui.g && (ui.g.phase === "trial" || ui.g.phase === "deliberation");
+    html = '<main class="wrap screen-' + ui.screen + (wide ? " wide" : "") + '">' + html + "</main>";
+    // Phones get a fresh view whenever anyone does anything. Skip redraws that
+    // change nothing, and never redraw mid-tap, so taps aren't lost.
+    if (ui.screen === "phone") {
+      if (html === lastHtml) return;
+      if (pointerDown) { pendingRender = true; return; }
+    }
+    lastHtml = html;
+    app.innerHTML = html;
+    if ((ui.screen === "solo" || ui.screen === "host") && ui.g && ui.g.phase === "trial") {
+      document.getElementById("dialog").innerHTML = ui.screen === "solo" ? soloTrialDialog() : hostTrialDialog();
+      updateBoard(ui.g);
+    }
+    scrollLog();
+  }
+
   function go(screen) {
-    state.screen = screen;
+    ui.screen = screen;
     render();
     window.scrollTo(0, 0);
   }
 
-  function advance() {
-    if (state.screen !== "trial") return;
-    if (state.beat < state.beats.length - 1) { state.beat++; updateTrial(); }
-    else { startDeliberation(); go("deliberate"); }
+  function leavePhone() {
+    var wasSeated = ui.phone || ui.view;
+    phoneStop();
+    try { sessionStorage.removeItem(JOIN_KEY); } catch (e) {}
+    try { if (wasSeated) history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
+    ui.view = null;
+    ui.phoneStatus = "";
+    ui.phoneError = "";
   }
+
+  app.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var code = Net.cleanCode(document.getElementById("join-code").value);
+    var name = String(document.getElementById("join-name").value || "").trim();
+    if (code.length !== 4) { ui.phoneError = "The game code has 4 letters."; ui.joinCode = code; render(); return; }
+    if (!name) { ui.phoneError = "Please enter your name."; ui.joinCode = code; render(); return; }
+    var saved = readJoin();
+    var token = saved && saved.token && saved.code === code && saved.name === name ? saved.token : Math.random().toString(36).slice(2) + Date.now().toString(36);
+    saveJoin({ code: code, name: name, token: token });
+    ui.phoneError = "";
+    ui.view = null;
+    ui.retries = 0;
+    phoneConnect(code, name, token);
+  });
 
   app.addEventListener("click", function (e) {
     var b = e.target.closest("[data-action]");
-    if (!b || b.disabled) return;
-    var c = currentCase();
-    var d = state.d;
-    switch (b.dataset.action) {
-      case "home": go("home"); break;
+    if (!b || b.disabled || b.tagName === "FORM") return;
+    var g = ui.g;
+    var a = b.dataset.action;
+    switch (a) {
+      case "home":
+        stopHost();
+        leavePhone();
+        ui.g = null;
+        go("home");
+        break;
       case "guide": go("guide"); break;
+      case "pick": ui.pickMode = b.dataset.mode; go("pick"); break;
+      case "join-screen": ui.phoneError = ""; go("join"); break;
+
+      // Solo
       case "start-case":
-        state = defaultState();
-        state.caseId = b.dataset.id;
-        state.beats = buildBeats(currentCase());
-        go("trial");
+        ui.g = E.createGame(b.dataset.id, "solo");
+        ui.showNotebook = false; ui.sel = null; ui.target = null;
+        go("solo");
         break;
-      case "advance": advance(); break;
-      case "back": if (state.beat > 0) { state.beat--; updateTrial(); } break;
-      case "note":
-        if (state.notes.length < NOTE_LIMIT && state.notes.indexOf(b.dataset.card) < 0) state.notes.push(b.dataset.card);
-        updateTrial();
-        break;
+      case "advance": soloAct({ type: "advance" }); var next = document.getElementById("next-btn"); if (next) next.focus(); break;
+      case "back": soloAct({ type: "back" }); break;
+      case "note": soloAct({ type: "write", fact: b.dataset.card }); break;
       case "unnote":
-        state.notes = state.notes.filter(function (id) { return id !== b.dataset.card; });
-        updateTrial();
+        if (ui.screen === "phone") phoneSend({ type: "unwrite", fact: b.dataset.card });
+        else soloAct({ type: "unwrite", fact: b.dataset.card });
         break;
-      case "notebook": state.showNotebook = !state.showNotebook; updateTrial(); break;
-      case "ask": askQuestion(Number(b.dataset.i)); break;
-      case "select": d.sel = d.sel === b.dataset.card ? null : b.dataset.card; render(); break;
-      case "target": if (d.sel) { d.target = b.dataset.id; render(); } break;
-      case "speak": if (d.sel && d.target) { playCard(d.sel, d.target); render(); } break;
-      case "listen":
-        say("you", "(You stay quiet and let the others talk.)");
-        jurorsTalk();
-        render();
+      case "notebook":
+        ui.showNotebook = !ui.showNotebook;
+        document.getElementById("dialog").innerHTML = soloTrialDialog();
         break;
-      case "call-vote": d.voting = true; render(); break;
-      case "cancel-vote": d.voting = false; render(); break;
-      case "cast": castVotes(b.dataset.v); render(); window.scrollTo(0, 0); break;
-    }
-    if (c && state.screen === "trial" && b.dataset.action === "advance") {
-      var next = document.getElementById("next-btn");
-      if (next) next.focus();
+      case "ask":
+        if (ui.screen === "solo") soloAct({ type: "ask", i: Number(b.dataset.i) });
+        break;
+      case "select": ui.sel = ui.sel === b.dataset.card ? null : b.dataset.card; if (ui.screen === "phone") renderPhoneKeepScroll(); else render(); break;
+      case "target": if (ui.sel) { ui.target = b.dataset.id; if (ui.screen === "phone") renderPhoneKeepScroll(); else render(); } break;
+      case "speak":
+        if (ui.sel && ui.target) { var f = ui.sel, t = ui.target; ui.sel = null; ui.target = null; soloAct({ type: "choose", fact: f, target: t }); }
+        break;
+      case "listen": soloAct({ type: "choose", pass: true }); break;
+      case "call-vote": soloAct({ type: "callVote" }); break;
+      case "cancel-vote": soloAct({ type: "cancelVote" }); break;
+      case "cast":
+        if (ui.screen === "phone") { phoneSend({ type: "ballot", verdict: b.dataset.v }); break; }
+        soloAct({ type: "ballot", verdict: b.dataset.v });
+        window.scrollTo(0, 0);
+        break;
+
+      // Hosting
+      case "host-case": startHost(b.dataset.id); break;
+      case "host-advance": hostAct({ type: "advance" }); break;
+      case "host-back": hostAct({ type: "back" }); break;
+      case "end-game":
+        stopHost();
+        ui.g = null;
+        go("home");
+        break;
+
+      // Phone
+      case "m-start": phoneSend({ type: "start" }); break;
+      case "m-advance": phoneSend({ type: "advance" }); break;
+      case "m-back": phoneSend({ type: "back" }); break;
+      case "m-write": phoneSend({ type: "write", fact: b.dataset.card }); break;
+      case "m-ask": phoneSend({ type: "ask", i: Number(b.dataset.i) }); break;
+      case "m-speak":
+        if (ui.sel) {
+          phoneSend({ type: "choose", fact: ui.sel, target: ui.target || "all" });
+          ui.sel = null; ui.target = null; ui.editing = false;
+        }
+        break;
+      case "m-pass": phoneSend({ type: "choose", pass: true }); ui.sel = null; ui.target = null; ui.editing = false; break;
+      case "m-change": ui.editing = true; renderPhoneKeepScroll(); break;
+      case "m-close-turn": phoneSend({ type: "closeTurn" }); break;
+      case "m-call-vote": phoneSend({ type: "callVote" }); break;
+      case "m-cancel-vote": phoneSend({ type: "cancelVote" }); break;
+      case "rejoin":
+        var saved = readJoin();
+        if (saved) { ui.retries = 0; ui.phoneStatus = ""; phoneConnect(saved.code, saved.name, saved.token); }
+        break;
+      case "leave-game":
+        leavePhone();
+        go("home");
+        break;
     }
   });
 
   document.addEventListener("keydown", function (e) {
-    if (state.screen !== "trial") return;
+    var trial = ui.g && ui.g.phase === "trial" && (ui.screen === "solo" || ui.screen === "host");
+    if (!trial) return;
     if (e.target.closest && e.target.closest("button, input, textarea")) return;
-    if (e.key === " " || e.key === "Enter" || e.key === "ArrowRight") { e.preventDefault(); advance(); }
-    else if (e.key === "ArrowLeft" && state.beat > 0) { state.beat--; updateTrial(); }
+    var host = ui.screen === "host";
+    if (e.key === " " || e.key === "Enter" || e.key === "ArrowRight") {
+      e.preventDefault();
+      if (host) hostAct({ type: "advance" }); else soloAct({ type: "advance" });
+    } else if (e.key === "ArrowLeft") {
+      if (host) hostAct({ type: "back" }); else soloAct({ type: "back" });
+    }
   });
 
-  // Keep the game in progress when a new version of the page is published.
-  var hot = window.claude && window.claude.hot;
-  if (hot && hot.snapshot) hot.snapshot(function () { return state; });
-  function start(data) {
-    if (data && data.screen && (data.screen === "home" || data.caseId)) state = Object.assign(defaultState(), data);
-    render();
+  // A join link (#join-ABCD) opens the join screen with the code filled in.
+  var m = /^#join-([A-Za-z]{4})$/.exec(location.hash);
+  if (m) {
+    ui.joinCode = m[1].toUpperCase();
+    ui.screen = "join";
   }
-  if (hot && hot.ready) hot.ready(start);
-  else start(hot && hot.data);
+  render();
+  // After a reload, a phone that was already seated in this game rejoins by itself.
+  var seated = null;
+  try { seated = JSON.parse(sessionStorage.getItem(JOIN_KEY) || "null"); } catch (e) {}
+  if (m && seated && seated.token && seated.code === ui.joinCode) phoneConnect(seated.code, seated.name, seated.token);
 })();
