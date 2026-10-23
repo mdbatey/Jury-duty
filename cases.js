@@ -11,6 +11,17 @@ window.JURORS = [
     look: {skin: 1, hair: "bun", hairColor: "white", older: true, glasses: true, clothes: "#6b4f8a"},
     react: { agree: ["Mm-hm.", "Noted."], against: ["Hm.", "Oh dear."] },
     faces: { agree: "smug", against: "surprised" },
+    approaches: { likes: "question", dislikes: "press" },
+    replies: {
+      records: { moved: "That's in the record. I can't ignore it.", unmoved: "One record doesn't settle it for me." },
+      timeline: { moved: "When you lay out the times like that, it matters.", unmoved: "The timing could be a coincidence." },
+      motive: { moved: "A reason isn't proof, but I'll weigh it.", unmoved: "Motive isn't evidence that anyone actually did anything." },
+      physical: { moved: "Physical evidence carries weight. Fair point.", unmoved: "I'd want to know how that evidence was handled." },
+      procedure: { moved: "If the rules weren't followed, that changes things.", unmoved: "Procedure matters, but I don't think that was a real misstep." },
+      expert: { moved: "The expert was careful about that. I'll give it weight.", unmoved: "Experts can be wrong. I'm not deferring blindly." },
+      witness: { moved: "That's what the witness actually said under oath.", unmoved: "Testimony alone doesn't carry it for me." },
+      character: { moved: "How someone behaves does tell you something.", unmoved: "We're judging the evidence, not the person." }
+    },
     likes: ["procedure", "records"], sway: 0.9,
     say: {
       agree: "Exactly my thinking.",
@@ -25,6 +36,17 @@ window.JURORS = [
     look: {skin: 3, hair: "side", hairColor: "black", glasses: true, clothes: "#2e5a88"},
     react: { agree: ["Makes sense.", "Right."], against: ["Huh.", "Wait."] },
     faces: { agree: "smug", against: "surprised" },
+    approaches: { likes: "facts", dislikes: "press" },
+    replies: {
+      records: { moved: "Okay, the records back that up.", unmoved: "The records don't line up with that for me." },
+      timeline: { moved: "Huh. That timeline actually works.", unmoved: "The timeline still has gaps." },
+      motive: { moved: "Fine, that's a reason. Noted.", unmoved: "Motive is just a story until something backs it up." },
+      physical: { moved: "Hard evidence. I'll update on that.", unmoved: "That object could mean a lot of things." },
+      procedure: { moved: "If the process was broken, the result is suspect.", unmoved: "Messy process, but it doesn't change the facts." },
+      expert: { moved: "The expert's numbers make sense.", unmoved: "I'd want to see the expert's methods." },
+      witness: { moved: "That testimony is specific. That counts.", unmoved: "One person's memory isn't data." },
+      character: { moved: "Okay, patterns of behavior matter.", unmoved: "That's anecdotal." }
+    },
     likes: ["records", "timeline"], sway: 1,
     say: {
       agree: "Right. The facts back that up.",
@@ -38,6 +60,17 @@ window.JURORS = [
     look: {skin: 2, hair: "long", hairColor: "brown", clothes: "#3e6b55"},
     react: { agree: ["Oh.", "Mm."], against: ["Oof.", "Oh no."] },
     faces: { agree: "surprised", against: "sad" },
+    approaches: { likes: "question", dislikes: "press" },
+    replies: {
+      records: { moved: "Seeing it in writing makes it real.", unmoved: "Paper doesn't tell you what was in someone's heart." },
+      timeline: { moved: "When you put it in order, it makes sense.", unmoved: "Times can be off. People make mistakes." },
+      motive: { moved: "I can see why someone would do that. That matters.", unmoved: "Plenty of people have reasons and never act on them." },
+      physical: { moved: "Okay. That's hard to argue with.", unmoved: "Things don't tell the whole story." },
+      procedure: { moved: "That's not fair to anyone. It worries me.", unmoved: "Mistakes happen. People were doing their jobs." },
+      expert: { moved: "If the expert says so, I'll listen.", unmoved: "Experts don't know these people." },
+      witness: { moved: "I watched them say it. I believed them.", unmoved: "I'm not sure that witness was being straight with us." },
+      character: { moved: "That tells me a lot about who they are.", unmoved: "Good people do bad things, and the other way around." }
+    },
     likes: ["motive", "character", "witness"], sway: 1.1,
     say: {
       agree: "Yes. That's how I see it too.",
@@ -51,6 +84,17 @@ window.JURORS = [
     look: {skin: 0, hair: "bald", hairColor: "gray", older: true, facial: "beard", clothes: "#8a3b3b"},
     react: { agree: ["Ha.", "Told ya."], against: ["Hmph.", "Nah."] },
     faces: { agree: "smug", against: "angry" },
+    approaches: { likes: "press", dislikes: "question" },
+    replies: {
+      records: { moved: "Alright, it's written down. Fine.", unmoved: "Paperwork. Anybody can fill out paperwork." },
+      timeline: { moved: "Huh. The clock doesn't lie.", unmoved: "Clocks, schmocks." },
+      motive: { moved: "Yeah, people do dumb things for money.", unmoved: "Wanting something isn't doing it." },
+      physical: { moved: "Now that's something I can see. Okay.", unmoved: "That doesn't prove what you think it proves." },
+      procedure: { moved: "Sloppy work. I'll give you that.", unmoved: "They had a job to do. Cut them some slack." },
+      expert: { moved: "Even I can follow that.", unmoved: "Experts. Paid to say whatever." },
+      witness: { moved: "They were there. Hard to argue.", unmoved: "People see what they want to see." },
+      character: { moved: "That tells you what kind of person we're dealing with.", unmoved: "Nice guy, bad guy, doesn't matter to me." }
+    },
     likes: ["physical"], sway: 0.6,
     say: {
       agree: "Now you're talking.",
@@ -64,6 +108,17 @@ window.JURORS = [
     look: {skin: 5, hair: "curly", hairColor: "black", clothes: "#9a7420"},
     react: { agree: ["Exactly.", "See?"], against: ["Ugh.", "Really?"] },
     faces: { agree: "smug", against: "angry" },
+    approaches: { likes: "question", dislikes: "facts" },
+    replies: {
+      records: { moved: "Okay, that's documented. Fair.", unmoved: "Who made that record, though?" },
+      timeline: { moved: "That timeline is pretty hard to explain away.", unmoved: "Timelines get bent to fit a theory." },
+      motive: { moved: "Okay, I see the motive.", unmoved: "Having a motive doesn't make someone guilty." },
+      physical: { moved: "Physical evidence. Fine, that counts.", unmoved: "And who collected that evidence?" },
+      procedure: { moved: "That's exactly the kind of thing that matters.", unmoved: "That's not really a procedure problem." },
+      expert: { moved: "The research backs that up.", unmoved: "One expert isn't the whole science." },
+      witness: { moved: "Okay, that testimony holds up.", unmoved: "I'm not sold on that witness." },
+      character: { moved: "Alright, that says something.", unmoved: "Character attacks don't prove anything." }
+    },
     likes: ["procedure", "expert"], sway: 1,
     say: {
       agree: "Thank you. Finally someone said it.",
@@ -103,6 +158,8 @@ window.JURORS = [
 //   (conflictsWith), a bonus fact the finder earns (title, dir, power, tags),
 //   and an explanation shown when it's found. Give each case one pointing
 //   each way.
+// A fact can also list rebuts: ["id"] (the facts it answers in deliberation)
+//   and replies: { juror: { moved, unmoved } } for that juror's reply to it.
 // jury.start: each juror's starting opinion, 0 to 100 (100 = sure of guilt).
 // jury.takes: what each juror says first in the jury room.
 // jury.points: arguments the computer jurors raise during deliberation.
@@ -133,22 +190,22 @@ window.CASES = [
       defense: { label: "Dana Whitlock", lawyer: "Defense attorney Sam Pruitt" }
     },
     cards: {
-      "seven-nights": { title: "Seven of the nine short nights were Dana's", dir: 1, power: 3, tags: ["records"] },
+      "seven-nights": { title: "Seven of the nine short nights were Dana's", dir: 1, power: 3, tags: ["records"], rebuts: ["kyle-closed"], replies: { tasha: { unmoved: "Seven nights the bag sat in the safe. That's not seven nights she stole." }, carla: { moved: "Seven out of nine. That's hard to explain away." } } },
       "bag-video": { title: "Video shows Dana carrying the bag out on her nights", dir: 1, power: 1, tags: ["physical"] },
-      "rent-text": { title: "Dana texted that she was desperate about rent", dir: 1, power: 2, tags: ["motive"] },
+      "rent-text": { title: "Dana texted that she was desperate about rent", dir: 1, power: 2, tags: ["motive"], rebuts: ["slips-right"] },
       "cash-car": { title: "Dana paid $3,800 cash for a car in mid-April", dir: 1, power: 2, tags: ["records", "motive"] },
-      "no-record-700": { title: "No record of Dana's $700 in coffee-can savings", dir: 1, power: 1, tags: ["records"] },
+      "no-record-700": { title: "No record of Dana's $700 in coffee-can savings", dir: 1, power: 1, tags: ["records"], rebuts: ["tax-refund"] },
       "landlord": { title: "Landlord says Dana was two months behind on rent", dir: 1, power: 2, tags: ["motive"], struck: true },
       "plain-bags": { title: "The bank bags weren't tamper-evident", dir: -1, power: 2, tags: ["physical", "procedure"] },
-      "kyle-alone": { title: "Kyle was alone with the safe for hours on Dana's nights", dir: -1, power: 3, tags: ["timeline"] },
-      "kyle-closed": { title: "Kyle closed on the other two short nights", dir: -1, power: 2, tags: ["records"] },
-      "no-video": { title: "No video shows Dana taking any money", dir: -1, power: 2, tags: ["physical"] },
-      "tax-refund": { title: "A $3,100 tax refund was withdrawn the day before the car purchase", dir: -1, power: 3, tags: ["records"] },
+      "kyle-alone": { title: "Kyle was alone with the safe for hours on Dana's nights", dir: -1, power: 3, tags: ["timeline"], rebuts: ["seven-nights", "bag-video"], replies: { hank: { moved: "Three hours alone with that safe? Okay, that's a problem.", unmoved: "Kyle's family. Marty trusted him." }, dev: { moved: "So the shortages follow the safe, not Dana. That's the real pattern." } } },
+      "kyle-closed": { title: "Kyle closed on the other two short nights", dir: -1, power: 2, tags: ["records"], rebuts: ["seven-nights"] },
+      "no-video": { title: "No video shows Dana taking any money", dir: -1, power: 2, tags: ["physical"], rebuts: ["bag-video"] },
+      "tax-refund": { title: "A $3,100 tax refund was withdrawn the day before the car purchase", dir: -1, power: 3, tags: ["records"], rebuts: ["cash-car"], replies: { dev: { moved: "$3,100 in, $3,100 out, and the car bought the next day. That math works." }, hank: { unmoved: "A refund doesn't cover the whole $3,800." } } },
       "not-investigated": { title: "The detective never investigated Kyle", dir: -1, power: 2, tags: ["procedure"] },
       "slips-right": { title: "Dana says she counted twice and the slips were right", dir: -1, power: 1, tags: ["character"] },
       "kyle-advance": { title: "Kyle asked for a pay advance in April", dir: -1, power: 2, tags: ["motive", "records"] },
       "safe-overnight": { title: "Dana kept the bag in the safe overnight and dropped it at the bank each morning", dir: -1, power: 1, tags: ["timeline"] },
-      "late-entries": { title: "Dana's code opened the back door late at night on four of her closing nights", dir: 1, power: 2, tags: ["records", "timeline"] },
+      "late-entries": { title: "Dana's code opened the back door late at night on four of her closing nights", dir: 1, power: 2, tags: ["records", "timeline"], rebuts: ["kyle-alone", "slips-right"], replies: { carla: { moved: "Why would she come back at midnight? That scares me." } } },
       "dana-never": { title: "Dana never once did a same-night drop after January", dir: -1, power: 1, tags: ["timeline"] }
     },
     steps: [
@@ -302,12 +359,12 @@ window.CASES = [
     contradictions: [
       {
         id: "c-video", line: "video-out", conflictsWith: "safe-overnight",
-        bonus: { title: "The video can't show Dana taking the deposit: it stayed in the safe overnight", dir: -1, power: 3, tags: ["physical", "timeline"] },
+        bonus: { title: "The video can't show Dana taking the deposit: it stayed in the safe overnight", dir: -1, power: 3, tags: ["physical", "timeline"], rebuts: ["bag-video"] },
         explain: "Marty said Dana left the deposit bag in the safe overnight and took it to the bank the next morning. So whatever the register camera shows her carrying out at night, it isn't the deposit. The detective's video doesn't prove what he says it does."
       },
       {
         id: "c-late", line: "never-back", conflictsWith: "late-entries",
-        bonus: { title: "Dana says she never came back at night, but her code opened the back door late", dir: 1, power: 3, tags: ["records", "character"] },
+        bonus: { title: "Dana says she never came back at night, but her code opened the back door late", dir: 1, power: 3, tags: ["records", "character"], rebuts: ["kyle-alone"] },
         explain: "The alarm records show Dana's code opening the back door around 11:40 p.m. on four of her closing nights. She just said she never came back. Either she's mistaken or she's hiding something, and the safe was right there."
       }
     ],
@@ -362,27 +419,27 @@ window.CASES = [
     },
     cards: {
       "warning-signs": { title: "The lean, dead limbs and mushrooms were visible for years", dir: 1, power: 2, tags: ["physical"] },
-      "letter": { title: "Joan warned Gary in writing eight months before", dir: 1, power: 3, tags: ["records"] },
+      "letter": { title: "Joan warned Gary in writing eight months before", dir: 1, power: 3, tags: ["records"], rebuts: ["rick-experienced"], replies: { carla: { moved: "She put it in writing and offered to pay half. What else could she do?" }, hank: { unmoved: "A neighbor's note isn't a tree expert." } } },
       "insurance": { title: "Joan's insurance already paid part of her loss", dir: -1, power: 2, tags: ["records"], struck: true },
       "maple": { title: "A maple two houses down also fell in the storm", dir: -1, power: 1, tags: ["physical"] },
-      "rot-70": { title: "The trunk was 70% rotten where it broke", dir: 1, power: 3, tags: ["expert", "physical"] },
+      "rot-70": { title: "The trunk was 70% rotten where it broke", dir: 1, power: 3, tags: ["expert", "physical"], rebuts: ["storm-63", "healthy-fell"], replies: { hank: { moved: "Seventy percent hollow. I've seen beams like that. They go." }, tasha: { unmoved: "The plaintiff paid for that number." } } },
       "detectable": { title: "A 10-minute drill test would have found the rot", dir: 1, power: 2, tags: ["expert", "procedure"] },
       "would-survive": { title: "A healthy oak would more likely than not have survived", dir: 1, power: 2, tags: ["expert"] },
       "paid-expert": { title: "The arborist is paid $250 an hour to testify", dir: -1, power: 1, tags: ["expert"] },
-      "healthy-fell": { title: "Some healthy trees fell in the storm too", dir: -1, power: 2, tags: ["expert", "physical"] },
-      "not-certain": { title: "The expert can't say for sure the tree would have survived", dir: -1, power: 2, tags: ["expert"] },
-      "rick-experienced": { title: "Rick has 20 years of experience with trees", dir: -1, power: 2, tags: ["character"] },
-      "storm-63": { title: "Gary's weather station recorded a 63 mph gust", dir: -1, power: 2, tags: ["physical", "records"] },
-      "not-certified": { title: "Rick is not a certified arborist", dir: 1, power: 1, tags: ["expert"] },
-      "sidewalk-look": { title: "Rick only looked from the sidewalk, for about 10 minutes", dir: 1, power: 3, tags: ["procedure"] },
+      "healthy-fell": { title: "Some healthy trees fell in the storm too", dir: -1, power: 2, tags: ["expert", "physical"], rebuts: ["would-survive", "rot-70"] },
+      "not-certain": { title: "The expert can't say for sure the tree would have survived", dir: -1, power: 2, tags: ["expert"], rebuts: ["would-survive"] },
+      "rick-experienced": { title: "Rick has 20 years of experience with trees", dir: -1, power: 2, tags: ["character"], rebuts: ["not-certified"] },
+      "storm-63": { title: "Gary's weather station recorded a 63 mph gust", dir: -1, power: 2, tags: ["physical", "records"], rebuts: ["letter", "warning-signs"], replies: { dev: { moved: "Sixty-three miles an hour is a real storm. That's a factor." }, carla: { unmoved: "Storms happen. Joan warned him anyway." } } },
+      "not-certified": { title: "Rick is not a certified arborist", dir: 1, power: 1, tags: ["expert"], rebuts: ["rick-experienced"] },
+      "sidewalk-look": { title: "Rick only looked from the sidewalk, for about 10 minutes", dir: 1, power: 3, tags: ["procedure"], rebuts: ["rick-experienced"], replies: { ruth: { moved: "Ten minutes from the sidewalk isn't an inspection." }, hank: { unmoved: "Plenty of guys can size up a tree from the curb." } } },
       "declined-split": { title: "Gary turned down Joan's offer to split an inspection", dir: 1, power: 2, tags: ["character"] },
       "rick-absent": { title: "Rick didn't come to court to be questioned", dir: 1, power: 1, tags: ["procedure"] },
       "no-mulch": { title: "There was no mulch around the oak, just bare dirt", dir: 1, power: 1, tags: ["physical"] },
       "week-later": { title: "Dr. Achebe examined the stump and trunk about a week after the storm", dir: 1, power: 1, tags: ["expert"] },
       "trunk-gone": { title: "The city hauled the trunk away two days after the storm", dir: -1, power: 1, tags: ["physical", "records"] },
-      "maple-rotten": { title: "The maple that fell was badly rotted too", dir: 1, power: 2, tags: ["expert", "physical"] },
+      "maple-rotten": { title: "The maple that fell was badly rotted too", dir: 1, power: 2, tags: ["expert", "physical"], rebuts: ["healthy-fell", "maple"] },
       "cheap-fix": { title: "Removing the oak would have cost about $3,000", dir: 1, power: 1, tags: ["records"] },
-      "snapped": { title: "The oak snapped at the trunk instead of uprooting", dir: 1, power: 2, tags: ["physical"] }
+      "snapped": { title: "The oak snapped at the trunk instead of uprooting", dir: 1, power: 2, tags: ["physical"], rebuts: ["storm-63"] }
     },
     steps: [
       {
@@ -523,17 +580,17 @@ window.CASES = [
     contradictions: [
       {
         id: "c-mulch", line: "mulch", conflictsWith: "no-mulch",
-        bonus: { title: "Rick blamed the mushrooms on mulch, but there was no mulch around the oak", dir: 1, power: 3, tags: ["physical", "procedure"] },
+        bonus: { title: "Rick blamed the mushrooms on mulch, but there was no mulch around the oak", dir: 1, power: 3, tags: ["physical", "procedure"], rebuts: ["rick-experienced"] },
         explain: "Joan said nothing but bare dirt grows under that tree. If Rick thought the mushrooms came from mulch, he wasn't really looking at the tree."
       },
       {
         id: "c-trunk", line: "trunk-gone", conflictsWith: "week-later",
-        bonus: { title: "The arborist says he examined the trunk a week later, but it was gone after two days", dir: -1, power: 3, tags: ["expert", "records"] },
+        bonus: { title: "The arborist says he examined the trunk a week later, but it was gone after two days", dir: -1, power: 3, tags: ["expert", "records"], rebuts: ["rot-70"] },
         explain: "If the city hauled the trunk away two days after the storm, Dr. Achebe couldn't have examined it a week later. That doesn't prove he's wrong about the rot, but it's a reason to question how carefully he worked."
       }
     ],
     jury: {
-      start: { ruth: 55, dev: 48, carla: 66, hank: 28, tasha: 44 },
+      start: { ruth: 48, dev: 42, carla: 62, hank: 24, tasha: 38 },
       takes: {
         ruth: "Remember, this is civil. More likely than not. That's a much lower bar than a criminal case.",
         dev: "For me it comes down to whether the tree would've fallen anyway.",
@@ -585,26 +642,26 @@ window.CASES = [
     },
     cards: {
       "face-to-face": { title: "Nadia was three feet from the robber under bright lights", dir: 1, power: 2, tags: ["witness"] },
-      "picked-lineup": { title: "Nadia picked Marcus out of six photos", dir: 1, power: 3, tags: ["witness"] },
+      "picked-lineup": { title: "Nadia picked Marcus out of six photos", dir: 1, power: 3, tags: ["witness"], rebuts: ["two-minutes"], replies: { tasha: { unmoved: "She picked the guy the detective already liked." }, dev: { moved: "She picked him out of six. Luck alone would be one in six." } } },
       "certain-now": { title: "Nadia says she's certain today", dir: 1, power: 1, tags: ["witness", "character"] },
-      "two-minutes": { title: "The robbery lasted under two minutes, hood up", dir: -1, power: 2, tags: ["witness", "timeline"] },
-      "knife-focus": { title: "Nadia was watching the knife", dir: -1, power: 2, tags: ["witness"] },
-      "pretty-sure": { title: "At the lineup, Nadia only said 'pretty sure'", dir: -1, power: 3, tags: ["witness", "procedure"] },
-      "feedback": { title: "The detective told her, 'Good. That's who we thought.'", dir: -1, power: 3, tags: ["procedure"] },
+      "two-minutes": { title: "The robbery lasted under two minutes, hood up", dir: -1, power: 2, tags: ["witness", "timeline"], rebuts: ["face-to-face"] },
+      "knife-focus": { title: "Nadia was watching the knife", dir: -1, power: 2, tags: ["witness"], rebuts: ["face-to-face"] },
+      "pretty-sure": { title: "At the lineup, Nadia only said 'pretty sure'", dir: -1, power: 3, tags: ["witness", "procedure"], rebuts: ["certain-now", "picked-lineup"], replies: { carla: { moved: "Pretty sure. That's not the same as certain, is it." }, hank: { unmoved: "Pretty sure, certain. Same thing to me." } } },
+      "feedback": { title: "The detective told her, 'Good. That's who we thought.'", dir: -1, power: 3, tags: ["procedure"], rebuts: ["picked-lineup"], replies: { ruth: { moved: "The detective shouldn't have said that. It taints everything after." }, hank: { unmoved: "So he said good job. So what?" } } },
       "anon-tip": { title: "An anonymous tip named Marcus", dir: 1, power: 2, tags: ["procedure"], struck: true },
       "clean-shaven": { title: "That night, Nadia described the robber as clean-shaven", dir: -1, power: 1, tags: ["witness"] },
       "no-hoodie-claim": { title: "Marcus told police he didn't own a gray hoodie", dir: -1, power: 1, tags: ["character"] },
       "matches": { title: "Marcus matches the description and lives eight blocks away", dir: 1, power: 1, tags: ["timeline"] },
       "hoodie": { title: "A gray hoodie was found in Marcus's closet", dir: 1, power: 2, tags: ["physical"] },
       "not-blind": { title: "The lineup wasn't blind: the detective knew the suspect", dir: -1, power: 2, tags: ["procedure"] },
-      "plain-hoodie": { title: "The hoodie is a plain one sold everywhere", dir: -1, power: 1, tags: ["physical"] },
-      "no-physical": { title: "No face on video, no prints, no knife, no cash", dir: -1, power: 3, tags: ["physical"] },
+      "plain-hoodie": { title: "The hoodie is a plain one sold everywhere", dir: -1, power: 1, tags: ["physical"], rebuts: ["hoodie"] },
+      "no-physical": { title: "No face on video, no prints, no knife, no cash", dir: -1, power: 3, tags: ["physical"], rebuts: ["matches", "hoodie"], replies: { hank: { moved: "No prints, no knife, no money. That's a lot of nothing." }, ruth: { moved: "The State has the burden. That's a lot missing." } } },
       "misid-common": { title: "Mistaken IDs are common in overturned convictions", dir: -1, power: 2, tags: ["expert"] },
-      "confidence-grows": { title: "Confidence grows after a detective's approval", dir: -1, power: 3, tags: ["expert", "procedure"] },
-      "many-right": { title: "The memory expert agrees many eyewitnesses are right", dir: 1, power: 1, tags: ["expert"] },
+      "confidence-grows": { title: "Confidence grows after a detective's approval", dir: -1, power: 3, tags: ["expert", "procedure"], rebuts: ["certain-now"] },
+      "many-right": { title: "The memory expert agrees many eyewitnesses are right", dir: 1, power: 1, tags: ["expert"], rebuts: ["misid-common"] },
       "gym-checkin": { title: "Marcus checked into a gym 15 minutes away at 9:21", dir: -1, power: 1, tags: ["timeline", "records"] },
-      "gym-gap": { title: "The gym doesn't track exits. He had time to get to the store", dir: 1, power: 2, tags: ["timeline", "records"] },
-      "side-door": { title: "The gym has an unalarmed side exit", dir: 1, power: 2, tags: ["timeline", "physical"] },
+      "gym-gap": { title: "The gym doesn't track exits. He had time to get to the store", dir: 1, power: 2, tags: ["timeline", "records"], rebuts: ["gym-checkin"] },
+      "side-door": { title: "The gym has an unalarmed side exit", dir: 1, power: 2, tags: ["timeline", "physical"], rebuts: ["gym-checkin", "regular"] },
       "no-footage": { title: "Police never asked for the gym's door video", dir: -1, power: 2, tags: ["procedure"] },
       "regular": { title: "Marcus checked in at that time most weeknights", dir: -1, power: 1, tags: ["records", "character"] }
     },
@@ -771,12 +828,12 @@ window.CASES = [
     contradictions: [
       {
         id: "c-beard", line: "beard", conflictsWith: "clean-shaven",
-        bonus: { title: "Nadia described a clean-shaven man, but Marcus had a beard", dir: -1, power: 3, tags: ["witness", "physical"] },
+        bonus: { title: "Nadia described a clean-shaven man, but Marcus had a beard", dir: -1, power: 3, tags: ["witness", "physical"], rebuts: ["matches","picked-lineup"] },
         explain: "Marcus had a short beard when he was arrested three days after the robbery. You can't grow one in three days. Either Nadia's first description was wrong, or the robber wasn't Marcus."
       },
       {
         id: "c-hoodie", line: "hoodie-found", conflictsWith: "no-hoodie-claim",
-        bonus: { title: "Marcus said he didn't own a gray hoodie, but police found one in his closet", dir: 1, power: 3, tags: ["physical", "character"] },
+        bonus: { title: "Marcus said he didn't own a gray hoodie, but police found one in his closet", dir: 1, power: 3, tags: ["physical", "character"], rebuts: ["plain-hoodie"] },
         explain: "Lying to police about the hoodie doesn't prove he robbed the store. But jurors may weigh a lie like that as a sign of a guilty conscience."
       }
     ],
