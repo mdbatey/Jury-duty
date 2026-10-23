@@ -217,8 +217,94 @@
       : '<p class="who guide-who"><span class="eyebrow">What\'s happening</span></p>';
     var x = b.show ? E.exhibit(c, b.show) : null;
     var ex = x ? '<figure class="exhibit"><span class="sticker">' + esc(x.label) + "</span><figcaption>" + esc(x.title) + "</figcaption><pre>" + esc(x.body) + "</pre></figure>" : "";
+    var active = !typing.done && typing.text === b.text;
+    var line = active
+      ? '<p class="line"><span class="sr-only">' + esc(b.text) + '</span><span id="typed" aria-hidden="true">' + esc(b.text.slice(0, typing.shown)) + "</span></p>"
+      : '<p class="line">' + esc(b.text) + "</p>";
     return '<div class="speech-box' + (b.who ? "" : " guide") + (b.kind === "objection" ? " objecting" : "") + '">' + head +
-      '<p class="line">' + esc(b.text) + "</p>" + ex + (extra || "") + "</div>";
+      line + '<div class="after-line" id="after-line"' + (active ? " hidden" : "") + ">" + ex + (extra || "") + "</div></div>";
+  }
+
+  // ---------- Typewriter text ----------
+
+  // Lines type out on the courtroom screen and in solo play (never on phones).
+  // A line the viewer has already seen, for example after Back, appears whole.
+  var SPEED_KEY = "jury-duty-text-speed";
+  var SPEEDS = { slow: 20, normal: 40, instant: 0 };
+  var SPEED_ORDER = ["slow", "normal", "instant"];
+  var SPEED_NAMES = { slow: "Slow", normal: "Normal", instant: "Instant" };
+  var typing = { key: null, text: "", shown: 0, done: true, timer: null };
+  var maxSeen = -1;
+
+  function textSpeed() {
+    var v = null;
+    try { v = localStorage.getItem(SPEED_KEY); } catch (e) {}
+    return SPEEDS.hasOwnProperty(v) ? v : "normal";
+  }
+
+  function charsPerSecond() {
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    return reduce ? 0 : SPEEDS[textSpeed()];
+  }
+
+  function resetTyping() {
+    clearTimeout(typing.timer);
+    typing = { key: null, text: "", shown: 0, done: true, timer: null };
+    maxSeen = -1;
+  }
+
+  // Start typing the current line, unless it's already typing or was seen before.
+  function beginLine(g) {
+    var b = g.beats[g.beat];
+    var key = g.beat + "|" + b.text;
+    if (typing.key === key) return;
+    clearTimeout(typing.timer);
+    var fresh = g.beat > maxSeen;
+    maxSeen = Math.max(maxSeen, g.beat);
+    typing = { key: key, text: b.text, shown: 0, done: !(fresh && charsPerSecond() > 0 && b.text.length), timer: null };
+    if (!typing.done) typing.timer = setTimeout(typeNext, 0);
+  }
+
+  function typeNext() {
+    var t = typing;
+    if (t.done) return;
+    t.shown++;
+    var el = document.getElementById("typed");
+    if (el) el.textContent = t.text.slice(0, t.shown);
+    if (t.shown >= t.text.length) { finishLine(); return; }
+    var ch = t.text.charAt(t.shown - 1);
+    var step = 1000 / charsPerSecond();
+    var pause = /[.!?]/.test(ch) ? step * 14 : /[,;:]/.test(ch) ? step * 6 : 0;
+    t.timer = setTimeout(typeNext, step + pause);
+  }
+
+  function finishLine() {
+    clearTimeout(typing.timer);
+    typing.done = true;
+    typing.shown = typing.text.length;
+    var el = document.getElementById("typed");
+    if (el) el.textContent = typing.text;
+    var after = document.getElementById("after-line");
+    if (after) after.hidden = false;
+  }
+
+  // Next while a line is typing finishes it instead of moving on.
+  function finishIfTyping() {
+    if (typing.done || !ui.g || ui.g.phase !== "trial") return false;
+    finishLine();
+    return true;
+  }
+
+  function speedButton() {
+    return '<button class="btn-link speed-btn" data-action="speed" aria-label="Text speed: ' + SPEED_NAMES[textSpeed()] + '. Tap to change.">Text speed: ' + SPEED_NAMES[textSpeed()] + "</button>";
+  }
+
+  // Draw the trial's dialogue box and move the board to the current line.
+  function showDialog() {
+    var g = ui.g;
+    beginLine(g);
+    document.getElementById("dialog").innerHTML = ui.screen === "solo" ? soloTrialDialog() : hostTrialDialog();
+    updateBoard(g);
   }
 
   function phaseHtml(b, index, total) {
@@ -381,7 +467,7 @@
     var g = ui.g;
     var c = E.findCase(g.caseId);
     if (g.phase === "trial") {
-      return renderCourtroom(c, '<div class="trial-top"><button class="btn-link" data-action="home">← Leave court</button><span class="docket">' + esc(c.caption) + " · No. " + esc(c.docket) + "</span></div>");
+      return renderCourtroom(c, '<div class="trial-top"><button class="btn-link" data-action="home">← Leave court</button>' + speedButton() + '<span class="docket">' + esc(c.caption) + " · No. " + esc(c.docket) + "</span></div>");
     }
     if (g.phase === "deliberation") return renderSoloDeliberation();
     return renderSoloVerdict();
@@ -391,8 +477,7 @@
     var before = ui.g.phase;
     if (!E.apply(ui.g, 0, a)) return;
     if (ui.g.phase === "trial") {
-      document.getElementById("dialog").innerHTML = soloTrialDialog();
-      updateBoard(ui.g);
+      showDialog();
     } else if (ui.g.phase === before) {
       render();
     } else {
@@ -406,7 +491,7 @@
     var g = ui.g;
     var fore = g.humans[g.foreperson];
     var live = g.humans.filter(function (p) { return p.connected; }).length;
-    return '<div class="trial-top"><button class="btn-link" data-action="end-game">End game</button>' +
+    return '<div class="trial-top"><button class="btn-link" data-action="end-game">End game</button>' + (g.phase === "trial" ? speedButton() : "") +
       '<span class="docket">' + esc(c.caption) + " · Code <b class=\"code-inline\">" + esc(ui.code || "----") + "</b> · " +
       live + " of " + g.humans.length + " jurors connected" + (fore ? " · Foreperson: " + esc(fore.name) : "") + "</span></div>";
   }
@@ -500,6 +585,7 @@
 
   function startHost(caseId) {
     stopHost();
+    resetTyping();
     ui.g = E.createGame(caseId, "multi");
     ui.code = null;
     ui.hostError = null;
@@ -550,7 +636,9 @@
       hostChanged();
       return;
     }
-    if (m.type === "action" && entry.h >= 0 && E.apply(g, entry.h, m.action)) hostChanged();
+    if (m.type !== "action" || entry.h < 0) return;
+    if (m.action && m.action.type === "advance" && entry.h === g.foreperson && finishIfTyping()) return;
+    if (E.apply(g, entry.h, m.action)) hostChanged();
   }
 
   function hostDropped(entry) {
@@ -569,8 +657,7 @@
       ui.sig = sig;
       render();
     } else {
-      document.getElementById("dialog").innerHTML = hostTrialDialog();
-      updateBoard(g);
+      showDialog();
     }
   }
 
@@ -859,10 +946,7 @@
     }
     lastHtml = html;
     app.innerHTML = html;
-    if ((ui.screen === "solo" || ui.screen === "host") && ui.g && ui.g.phase === "trial") {
-      document.getElementById("dialog").innerHTML = ui.screen === "solo" ? soloTrialDialog() : hostTrialDialog();
-      updateBoard(ui.g);
-    }
+    if ((ui.screen === "solo" || ui.screen === "host") && ui.g && ui.g.phase === "trial") showDialog();
     scrollLog();
   }
 
@@ -915,11 +999,12 @@
 
       // Solo
       case "start-case":
+        resetTyping();
         ui.g = E.createGame(b.dataset.id, "solo");
         ui.showNotebook = false; ui.sel = null; ui.target = null;
         go("solo");
         break;
-      case "advance": soloAct({ type: "advance" }); var next = document.getElementById("next-btn"); if (next) next.focus(); break;
+      case "advance": if (!finishIfTyping()) soloAct({ type: "advance" }); var next = document.getElementById("next-btn"); if (next) next.focus(); break;
       case "back": soloAct({ type: "back" }); break;
       case "note": soloAct({ type: "write", fact: b.dataset.card }); break;
       case "unnote":
@@ -928,7 +1013,7 @@
         break;
       case "notebook":
         ui.showNotebook = !ui.showNotebook;
-        document.getElementById("dialog").innerHTML = soloTrialDialog();
+        showDialog();
         break;
       case "ask":
         if (ui.screen === "solo") soloAct({ type: "ask", i: Number(b.dataset.i) });
@@ -949,7 +1034,14 @@
 
       // Hosting
       case "host-case": startHost(b.dataset.id); break;
-      case "host-advance": hostAct({ type: "advance" }); break;
+      case "host-advance": if (!finishIfTyping()) hostAct({ type: "advance" }); break;
+      case "speed":
+        var nextSpeed = SPEED_ORDER[(SPEED_ORDER.indexOf(textSpeed()) + 1) % SPEED_ORDER.length];
+        try { localStorage.setItem(SPEED_KEY, nextSpeed); } catch (err) {}
+        if (nextSpeed === "instant") finishIfTyping();
+        b.textContent = "Text speed: " + SPEED_NAMES[nextSpeed];
+        b.setAttribute("aria-label", "Text speed: " + SPEED_NAMES[nextSpeed] + ". Tap to change.");
+        break;
       case "host-back": hostAct({ type: "back" }); break;
       case "end-game":
         stopHost();
@@ -992,6 +1084,7 @@
     var host = ui.screen === "host";
     if (e.key === " " || e.key === "Enter" || e.key === "ArrowRight") {
       e.preventDefault();
+      if (finishIfTyping()) return;
       if (host) hostAct({ type: "advance" }); else soloAct({ type: "advance" });
     } else if (e.key === "ArrowLeft") {
       if (host) hostAct({ type: "back" }); else soloAct({ type: "back" });

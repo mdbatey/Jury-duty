@@ -9,7 +9,7 @@ All cases are fictional. Some borrow the general shape of common real-world case
 ## How to play
 
 1. Choose **Play solo** and **pick a case** from the docket. (To play with friends, see [Playing with friends](#playing-with-friends).)
-2. **Watch the trial.** Tap **Next** (or press the space bar) to move it along. Witnesses walk to the stand, lawyers question them, and objections pop up with a plain explanation of what the judge decided.
+2. **Watch the trial.** Tap **Next** (or press the space bar) to move it along. Witnesses walk to the stand, lawyers question them, and objections pop up with a plain explanation of what the judge decided. Each line types out; tap **Next** once to finish it and again to move on. Use **Text speed** at the top to pick Slow, Normal or Instant.
 3. **Take notes.** When a witness says something important, tap **Write it down**. Your notebook holds 7 facts. Be careful: if the judge throws out an answer and you use it later, the other jurors will trust you less.
 4. **Ask one question.** Some witnesses give you the chance to send the judge a written question. The answer can help either side.
 5. **Deliberate.** In the jury room, play a fact from your notebook and choose who to say it to. Each juror is moved by different kinds of evidence:
