@@ -6,6 +6,10 @@
 
   var CASES = window.CASES || [];
   var TRIES = 3;
+  // How long a fact can be written down after its line first appears.
+  var FACT_MS = 15000;
+  // The game's clock. Tests can replace it with setClock().
+  var now = function () { return Date.now(); };
   // A computer juror's mood can move at most this much from reactions during the trial.
   var REACT_CAP = 10;
   // How hard an unanswered counter-argument pulls the other computer jurors, per point of the fact's power.
@@ -91,6 +95,7 @@
     var list = [
       { id: "judge", name: judge, role: "Judge", kind: "judge", home: "judge" },
       { id: "clerk", name: "Court clerk", role: "Clerk", kind: "clerk", home: "clerk", ini: "CL" },
+      { id: "bailiff", name: c.bailiff || "Bailiff Gus Ferreira", role: "Bailiff", kind: "clerk", home: "bailiff" },
       { id: "pl", name: c.parties.plaintiff.lawyer, role: c.kind === "criminal" ? "Prosecutor" : "Plaintiff's lawyer", kind: "pros", home: "p1" },
       { id: "dl", name: c.parties.defense.lawyer, role: "Defense lawyer", kind: "def", home: "d1" },
       { id: "def", name: c.parties.defense.label, role: "Defendant", kind: "def party", home: "d2" }
@@ -145,6 +150,9 @@
       if (s.type === "judge" || s.type === "instructions") {
         var phase = s.type === "judge" ? "The judge's welcome" : "Jury instructions";
         guide(EXPLAIN[s.type], phase);
+        if (s.type === "judge") {
+          beat({ who: "bailiff", text: "All rise. The Superior Court of Maple County is now in session, the Honorable " + s.speaker.replace(/^Judge /, "") + " presiding.", phase: phase });
+        }
         // The gavel opens court on the judge's first line.
         s.text.forEach(function (t, ti) { beat({ who: "judge", text: t, phase: phase, sfx: s.type === "judge" && ti === 0 ? "gavel" : undefined }); });
       } else if (s.type === "opening" || s.type === "closing") {
@@ -168,13 +176,20 @@
         beat({ who: "clerk", text: "Please raise your right hand. Do you swear to tell the truth, the whole truth, and nothing but the truth?", phase: ph2, step: si });
         beat({ who: w, text: "I do.", phase: ph2, step: si });
         if (s.intro) guide(s.intro, ph2, si);
-        [["Direct examination", caller, s.direct], ["Cross-examination", crosser, s.cross]].forEach(function (part) {
+        if (s.jurorQuestion) guide("Heads up: after cross-examination, each juror can send this witness one written question. Think about what you'd want to know.", ph2, si);
+        [["Direct examination", caller, s.direct], ["Cross-examination", crosser, s.cross]].forEach(function (part, pi) {
           var phase = part[0] + ": " + s.name;
+          // Spoken hand-offs make it clear which side is asking.
+          if (pi === 0) beat({ who: "judge", text: "Counsel, you may question the witness.", phase: phase, step: si });
+          else {
+            beat({ who: "judge", text: "Cross-examination?", phase: phase, step: si });
+            beat({ who: part[1], text: "Yes, Your Honor.", phase: phase, step: si });
+          }
           pos[part[1]] = "podium";
           part[2].forEach(function (l) {
             if (l.objection) {
               var objector = l.by === "defense" ? "dl" : "pl";
-              var struck = beats[beats.length - 1].id;
+              var struck = beats.filter(function (x) { return x.answer; }).pop().id;
               beat({ who: objector, text: "Objection, Your Honor. " + l.objection + ".", phase: phase, kind: "objection", step: si, expression: "angry", sfx: "objection" });
               // A sustained objection strikes the answer just given.
               beat({ who: "judge", text: l.ruling + "." + (l.ruling === "Sustained" ? " The jury will disregard that answer." : ""), phase: phase, step: si, expression: "calm", sfx: "gavel", strikes: l.ruling === "Sustained" ? struck : undefined });
@@ -183,8 +198,10 @@
               beat({ who: part[1], text: l.q, phase: phase, step: si });
               // Witnesses look nervous under cross-examination unless a line says otherwise.
               beat({ who: w, text: l.a, phase: phase, card: l.card, show: l.show, step: si, sfx: l.sfx, mark: l.mark, react: l.react, answer: true, expression: l.expression || (part[0] === "Cross-examination" ? "nervous" : "calm") });
+              if (l.sfx === "murmur") beat({ who: "bailiff", text: "Order in the court.", phase: phase, step: si });
             }
           });
+          beat({ who: part[1], text: pi === 0 ? "Nothing further, Your Honor." : "Nothing further.", phase: phase, step: si });
           pos[part[1]] = part[1] === "dl" ? "d1" : "p1";
         });
         if (s.jurorQuestion) {
@@ -192,16 +209,23 @@
         }
         beat({ who: "judge", text: "Thank you. You may step down.", phase: ph2, step: si, stepDown: true });
         pos[w] = home;
+        // After a side's last witness, that side rests its case.
+        var next = c.steps[si + 1];
+        if (!next || next.type !== "witness" || next.side !== s.side) {
+          var side = s.side === "defense" ? "the defense" : c.kind === "criminal" ? "the State" : "the plaintiff";
+          beat({ who: caller, text: "Your Honor, " + side + " rests.", phase: ph2 });
+        }
       }
     });
-    beat({ who: "judge", text: "Members of the jury, you've heard all the evidence. You may now go to the jury room to deliberate.", phase: "To the jury room", kind: "end" });
+    beat({ who: "judge", text: "Members of the jury, you've heard all the evidence. You may now go to the jury room to deliberate.", phase: "To the jury room" });
+    beat({ who: "bailiff", text: "All rise for the jury. Jurors, please follow me to the jury room.", phase: "To the jury room", kind: "end" });
     return beats;
   }
 
   // ---------- Game setup and seats ----------
 
   function createGame(caseId, mode) {
-    var g = { caseId: caseId, mode: mode, phase: "lobby", beats: buildBeats(findCase(caseId), mode), beat: 0, humans: [], foreperson: 0, d: null, reached: {}, nudges: {} };
+    var g = { caseId: caseId, mode: mode, phase: "lobby", beats: buildBeats(findCase(caseId), mode), beat: 0, humans: [], foreperson: 0, d: null, reached: {}, seenAt: {}, nudges: {} };
     if (mode === "solo") {
       g.humans.push(newHuman("You", ""));
       g.phase = "trial";
@@ -291,19 +315,22 @@
     return ids.map(juror);
   }
 
-  // Facts a juror can write down right now. Solo: the current line only.
-  // Multiplayer: anything from the current witness's testimony until they step down.
-  function available(g) {
-    var b = g.beats[g.beat];
-    if (!b || g.phase !== "trial") return [];
-    if (g.mode === "solo") return b.card ? [b.card] : [];
-    if (b.step === undefined) return [];
-    var out = [];
-    for (var i = 0; i <= g.beat; i++) {
-      var x = g.beats[i];
-      if (x.step === b.step && x.card && out.indexOf(x.card) < 0) out.push(x.card);
+  // Facts a juror can write down right now: any fact whose line first
+  // appeared less than FACT_MS ago, newest first, with the time left.
+  function factTimes(g) {
+    if (g.phase !== "trial") return [];
+    var t = now(), out = [], seen = {};
+    for (var i = g.beats.length - 1; i >= 0; i--) {
+      var b = g.beats[i];
+      if (!b.card || seen[b.card] || g.seenAt[b.id] === undefined) continue;
+      var left = FACT_MS - (t - g.seenAt[b.id]);
+      if (left > 0) { seen[b.card] = true; out.push({ fact: b.card, ms: left }); }
     }
-    return out;
+    return out.sort(function (x, y) { return x.ms - y.ms; }).reverse();
+  }
+
+  function available(g) {
+    return factTimes(g).map(function (f) { return f.fact; });
   }
 
   // Testimony lines a juror can flag with "Something's off". Same window as
@@ -374,6 +401,13 @@
         return ask(g, h, a.i);
       case "flag":
         return flag(g, h, a.line, a.fact);
+      case "noQuestion":
+        var qb = g.beats[g.beat];
+        if (!me || g.phase !== "trial" || !qb || qb.kind !== "ask" || me.askUsed) return false;
+        qb.passed = qb.passed || {};
+        if (qb.passed[h]) return false;
+        qb.passed[h] = true;
+        return true;
       case "choose":
         return delib && !g.d.voting && me ? choose(g, h, a) : false;
       case "closeTurn":
@@ -428,6 +462,7 @@
     var b = g.beats[g.beat];
     if (!b || g.reached[b.id]) return;
     g.reached[b.id] = true;
+    g.seenAt[b.id] = now();
     if (b.strikes !== undefined) strikeReactions(g, b);
     react(g, b);
   }
@@ -482,8 +517,8 @@
 
   // ---------- Deliberation ----------
 
-  function say(g, who, text, cls, meta) {
-    g.d.log.push({ who: who, text: text, cls: cls || "", meta: meta || "" });
+  function say(g, who, text, cls, meta, to) {
+    g.d.log.push({ who: who, text: text, cls: cls || "", meta: meta || "", to: to || "" });
   }
 
   function clamp(n) { return Math.max(0, Math.min(100, n)); }
@@ -603,8 +638,7 @@
     var t = threshold(c);
     var present = computers(g);
     me.used.push(cardId);
-    var to = target === "all" ? "the whole table" : juror(target).short;
-    say(g, "h" + h, card.title + ".", "move", "argued to " + to + ", " + APPROACH_WORDS[approach] + (rebuttal ? " · rebuttal" : ""));
+    say(g, "h" + h, card.title + ".", "move", APPROACH_WORDS[approach] + (rebuttal ? " · rebuttal" : ""), target);
     if (card.struck) {
       me.strikes++;
       var fixer = present.filter(function (j) { return j.id === "ruth"; })[0] || present[0];
@@ -633,7 +667,7 @@
     var j = juror(r);
     var real = Math.abs(d.leans[r] - before[r]);
     var agrees = (before[r] >= t) === (card.dir > 0);
-    say(g, r, replyTo(j, card, agrees ? "agree" : real >= 8 ? "moved" : "unmoved"));
+    say(g, r, replyTo(j, card, agrees ? "agree" : real >= 8 ? "moved" : "unmoved"), "", "", "h" + h);
     return total;
   }
 
@@ -664,7 +698,7 @@
     var fact = options[0];
     var f = c.cards[fact];
     d.countered.push(fact);
-    say(g, j.id, "But remember: " + f.title + ".", "counter", "counter-argument");
+    say(g, j.id, "But remember: " + f.title + ".", "counter", "counter-argument", "all");
     var deltas = {};
     present.forEach(function (o) {
       var before = d.leans[o.id];
@@ -771,7 +805,8 @@
     }
     var total = (c.contradictions || []).length;
     if (total) rows.push({ title: "Contradictions found", text: me.found.length + " of " + total + ".", ok: me.found.length > 0 });
-    rows.push({ title: "Notes taken", text: good + " useful facts written down" + (badNotes ? ", plus " + badNotes + " the judge threw out" : "") + ". You asked " + (me.askUsed ? "one" : "no") + " juror question.", ok: good >= 5 && !badNotes });
+    rows.push({ title: "Notes taken", text: good + " useful facts written down" + (badNotes ? ", plus " + badNotes + " the judge threw out" : "") + ".", ok: good >= 5 && !badNotes });
+    rows.push({ title: "Juror question", text: me.askUsed ? "You asked one. Good use of a rare chance to hear something the lawyers didn't ask." : "You didn't use your juror question. It comes right after one witness's cross-examination, so watch for the judge's invitation.", ok: me.askUsed });
     rows.push({ title: "Played by the rules", text: me.strikes ? "You used thrown-out evidence " + me.strikes + (me.strikes === 1 ? " time." : " times.") : "You only argued with admitted evidence.", ok: !me.strikes });
     return rows;
   }
@@ -789,7 +824,7 @@
       phase: g.phase,
       beatIndex: g.beat,
       beatsLen: g.beats.length,
-      beat: g.phase === "trial" && b ? { who: b.who, text: b.text, phase: b.phase, kind: b.kind, show: b.show, step: b.step, askedBy: b.askedBy } : null,
+      beat: g.phase === "trial" && b ? { who: b.who, text: b.text, phase: b.phase, kind: b.kind, show: b.show, step: b.step, askedBy: b.askedBy, passed: !!(b.passed && b.passed[h]) } : null,
       foreperson: g.foreperson,
       humans: g.humans.map(function (p) { return { name: p.name, connected: p.connected, chosen: !!p.choice, voted: !!p.ballot }; }),
       computers: computers(g).map(function (j) { return j.id; }),
@@ -799,7 +834,7 @@
         h: h, name: me.name, notebook: me.notebook.slice(), used: me.used.slice(), askUsed: me.askUsed, strikes: me.strikes,
         bonus: me.bonus.slice(), found: me.found.slice(), tries: me.tries, lastFlag: me.lastFlag,
         flagLines: flagLines(g).map(function (i) { return { i: i, text: g.beats[i].text }; }),
-        choice: me.choice, ballot: me.ballot, lastBallot: me.lastBallot, available: available(g),
+        choice: me.choice, ballot: me.ballot, lastBallot: me.lastBallot, available: available(g), factTimes: factTimes(g),
         report: g.phase === "verdict" ? report(g, h) : null
       }
     };
@@ -811,6 +846,7 @@
     mood: mood, exhibit: exhibit, castOf: castOf, person: person,
     createGame: createGame, join: join, setConnected: setConnected, seats: seats, computers: computers,
     APPROACHES: APPROACHES, APPROACH_WORDS: APPROACH_WORDS,
+    FACT_MS: FACT_MS, setClock: function (fn) { now = fn; }, factTimes: factTimes,
     available: available, flagLines: flagLines, TRIES: TRIES, apply: apply, report: report, viewFor: viewFor
   };
 })();
