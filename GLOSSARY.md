@@ -38,6 +38,10 @@ _Avoid_: Lean (that is a mood), bias, prejudice
 All the computer jurors the game can choose from. Each game picks five of them.
 _Avoid_: Roster, cast, deck
 
+**Holdout**:
+The most stubborn computer juror on a jury. Every jury has one, and they are the last computer juror to give up a seat.
+_Avoid_: Boss juror, hardliner
+
 **Replay code**:
 A four-character code shown on the report card. Entering it with the same case brings back the same people, so friends can play exactly the same jury and compare.
 _Avoid_: Seed (in anything players see), game code (that identifies a live multiplayer game)

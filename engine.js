@@ -27,9 +27,14 @@
   var ROUNDS = 6;
   var SEATS = 6;
   var NAME_MAX = 16;
-  // As people join, computer jurors give up their seats in this order. Ruth
-  // (who enforces the judge's rules) and Hank (the holdout) stay longest.
-  var LEAVE_ORDER = ["tasha", "dev", "carla", "hank", "ruth"];
+  // How many computer jurors each game picks from the juror pool.
+  var PICKED = 5;
+  // Replay codes skip look-alikes: no O, I, L, 0 or 1.
+  var CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  // How far the replay code can shift a juror's starting mood, either way.
+  var START_SHIFT = 6;
+  // Jurors this hard to move can be a jury's holdout.
+  var HOLDOUT_SWAY = 0.7;
 
   // Short explanations shown with each part of the trial, for players who
   // have never been in a courtroom.
@@ -59,6 +64,91 @@
     return c.kind === "criminal"
       ? { yes: "Guilty", no: "Not guilty", yesId: "guilty", noId: "not-guilty" }
       : { yes: "Liable", no: "Not liable", yesId: "liable", noId: "not-liable" };
+  }
+
+  // ---------- Replay codes and the juror pool ----------
+
+  function newReplayCode() {
+    var code = "";
+    for (var i = 0; i < 4; i++) code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
+    return code;
+  }
+
+  // A cleaned-up replay code, or null if it isn't one.
+  function cleanReplayCode(text) {
+    var code = String(text || "").toUpperCase().replace(/\s+/g, "");
+    if (code.length !== 4) return null;
+    for (var i = 0; i < 4; i++) if (CODE_CHARS.indexOf(code[i]) < 0) return null;
+    return code;
+  }
+
+  // A random number generator that always gives the same numbers for the
+  // same replay code and purpose, so a code replays the same jury.
+  function seeded(code, purpose) {
+    var h = 2166136261;
+    var text = code + "/" + purpose;
+    for (var i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return function () {
+      h = (h + 0x6D2B79F5) | 0;
+      var t = Math.imul(h ^ (h >>> 15), 1 | h);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function shuffled(list, rand) {
+    var out = list.slice();
+    for (var i = out.length - 1; i > 0; i--) {
+      var k = Math.floor(rand() * (i + 1));
+      var tmp = out[i]; out[i] = out[k]; out[k] = tmp;
+    }
+    return out;
+  }
+
+  // Which five computer jurors sit, who leads in solo play, who is the
+  // holdout, and the order they give up seats as people join. Every jury has
+  // someone who can lead and a holdout, and the holdout leaves last.
+  function pickJury(code) {
+    var order = shuffled(JURORS.map(function (j) { return j.id; }), seeded(code, "jury"));
+    var jury = order.slice(0, PICKED);
+    var canLead = function (id) { return juror(id).leads; };
+    var stubborn = function (id) { return juror(id).sway <= HOLDOUT_SWAY; };
+    // Swap in a juror who passes the test, replacing someone from the end
+    // without breaking the other rule.
+    function ensure(test, keep) {
+      if (jury.some(test)) return;
+      var spare = order.filter(function (id) { return jury.indexOf(id) < 0 && test(id); })[0];
+      for (var i = PICKED - 1; spare && i >= 0; i--) {
+        var tryJury = jury.slice();
+        tryJury[i] = spare;
+        if (keep(tryJury)) { jury = tryJury; return; }
+      }
+    }
+    ensure(canLead, function () { return true; });
+    ensure(stubborn, function (list) { return list.some(canLead); });
+    var leaders = jury.filter(canLead);
+    var lead = leaders.length ? leaders[Math.floor(seeded(code, "lead")() * leaders.length)] : jury[0];
+    var leave = shuffled(jury, seeded(code, "leave"));
+    var holdout = leave.reduce(function (a, b) { return juror(b).sway < juror(a).sway ? b : a; });
+    leave = leave.filter(function (id) { return id !== holdout; }).concat([holdout]);
+    return { jury: jury, lead: lead, holdout: holdout, leave: leave };
+  }
+
+  // Where a computer juror's mood starts: the case's own number for them if it
+  // has one, the case's holdout mood for the holdout, otherwise the case's
+  // base plus their outlook plus a small shift.
+  function startMood(g, c, id) {
+    var own = c.jury.start && c.jury.start[id];
+    if (own !== undefined) return own;
+    if (id === g.holdout && c.jury.holdout !== undefined) return c.jury.holdout;
+    var j = juror(id);
+    var outlook = (j.outlook && j.outlook[c.kind]) || 0;
+    var shift = Math.round((seeded(g.code, "mood/" + id)() * 2 - 1) * START_SHIFT);
+    return Math.max(15, Math.min(85, c.jury.base + outlook + shift));
+  }
+
+  function firstTake(c, j) {
+    return (c.jury.takes && c.jury.takes[j.id]) || j.takes[c.kind];
   }
 
   function threshold(c) { return c.kind === "criminal" ? 70 : 50; }
@@ -224,8 +314,11 @@
 
   // ---------- Game setup and seats ----------
 
-  function createGame(caseId, mode) {
-    var g = { caseId: caseId, mode: mode, phase: "lobby", beats: buildBeats(findCase(caseId), mode), beat: 0, humans: [], foreperson: 0, d: null, reached: {}, seenAt: {}, nudges: {} };
+  // code is an optional replay code; without one the game gets a new one.
+  function createGame(caseId, mode, code) {
+    code = cleanReplayCode(code) || newReplayCode();
+    var pick = pickJury(code);
+    var g = { caseId: caseId, mode: mode, code: code, jury: pick.jury, lead: pick.lead, holdout: pick.holdout, leave: pick.leave, phase: "lobby", beats: buildBeats(findCase(caseId), mode), beat: 0, humans: [], foreperson: 0, d: null, reached: {}, seenAt: {}, nudges: {} };
     if (mode === "solo") {
       g.humans.push(newHuman("You", ""));
       g.phase = "trial";
@@ -300,12 +393,13 @@
     return true;
   }
 
-  // Humans take the first seats in join order; computer jurors fill the rest.
+  // Humans take the first seats in join order; this game's computer jurors fill the rest.
   function seats(g) {
-    var gone = LEAVE_ORDER.slice(0, Math.max(0, g.humans.length - 1));
+    var gone = g.leave.slice(0, Math.max(0, g.humans.length - 1));
     var list = g.humans.map(function (p, i) { return { kind: "human", id: "h" + i, h: i, name: p.name }; });
-    JURORS.forEach(function (j) {
-      if (gone.indexOf(j.id) < 0) list.push({ kind: "computer", id: j.id, name: j.name, juror: j });
+    g.jury.forEach(function (id) {
+      var j = juror(id);
+      if (gone.indexOf(id) < 0) list.push({ kind: "computer", id: id, name: j.name, juror: j });
     });
     return list.slice(0, SEATS);
   }
@@ -454,7 +548,7 @@
   // ---------- Reactions during the trial ----------
 
   function trialLean(g, c, id) {
-    return clamp(c.jury.start[id] + (g.nudges[id] || 0));
+    return clamp(startMood(g, c, id) + (g.nudges[id] || 0));
   }
 
   // The first time a line appears, computer jurors may react to it.
@@ -534,12 +628,12 @@
 
     var likes = present.map(function (j) { return j.short + " by " + j.likes.join(" and "); }).join("; ");
     if (g.mode === "solo") {
-      say(g, null, "The six of you file into the jury room and sit around a long table. Ruth volunteers to be the foreperson.");
-      say(g, "ruth", "Let's go around the table and hear everyone's first impression before we argue about anything.");
+      say(g, null, "The six of you file into the jury room and sit around a long table. " + juror(g.lead).short + " volunteers to be the foreperson.");
+      say(g, g.lead, juror(g.lead).say.lead);
     } else {
       say(g, null, "The jury files into the jury room and sits around a long table. " + g.humans[g.foreperson].name + " is the foreperson.");
     }
-    present.forEach(function (j) { say(g, j.id, c.jury.takes[j.id]); });
+    present.forEach(function (j) { say(g, j.id, firstTake(c, j)); });
     var LIKED = { facts: "the facts laid out", press: "being pressed hard", question: "questions" };
     var styles = present.filter(function (j) { return j.approaches; }).map(function (j) {
       return j.short + " likes " + LIKED[j.approaches.likes] + " and dislikes " + LIKED[j.approaches.dislikes];
@@ -641,8 +735,8 @@
     say(g, "h" + h, card.title + ".", "move", APPROACH_WORDS[approach] + (rebuttal ? " · rebuttal" : ""), target);
     if (card.struck) {
       me.strikes++;
-      var fixer = present.filter(function (j) { return j.id === "ruth"; })[0] || present[0];
-      if (fixer) say(g, fixer.id, juror("ruth").say.struck);
+      var fixer = reminder(g, present, null);
+      if (fixer) say(g, fixer.id, fixer.say.struck);
       say(g, null, "The judge told the jury not to use that. Bringing it up makes the computer jurors trust " + (g.mode === "solo" ? "you" : me.name) + " less for the rest of deliberations.", "warn");
       return 0;
     }
@@ -718,6 +812,13 @@
     say(g, null, (g.mode === "solo" ? "You answered " : g.humans[h].name + " answered ") + juror(open.juror).short + "'s counter-argument, so it no longer pulls the jury.", "rebuttal");
   }
 
+  // Who reminds the jury that the judge threw something out: the computer
+  // foreperson if they're in the room, otherwise any other computer juror.
+  function reminder(g, present, not) {
+    var others = present.filter(function (j) { return j.id !== not; });
+    return others.filter(function (j) { return g.mode === "solo" && j.id === g.lead; })[0] || others[0];
+  }
+
   function scriptedPoint(g) {
     var c = findCase(g.caseId);
     var d = g.d;
@@ -733,8 +834,8 @@
       var speaker = side[0];
       say(g, speaker.id, p.text);
       if (p.struck) {
-        var fixer = present.filter(function (j) { return j.id !== speaker.id; })[0];
-        if (fixer) say(g, fixer.id, juror("ruth").say.struck);
+        var fixer = reminder(g, present, speaker.id);
+        if (fixer) say(g, fixer.id, fixer.say.struck);
       } else {
         present.forEach(function (j) {
           if (j.id !== speaker.id) d.leans[j.id] = clamp(d.leans[j.id] + p.dir * 6 * j.sway);
@@ -776,11 +877,13 @@
     var need = needed(c);
     d.tally = { yes: yes, no: no, humanYes: humanYes, humanNo: humanNo, computers: votes };
     d.voting = false;
-    say(g, null, (g.mode === "solo" ? "Ruth" : "The foreperson") + " reads the ballots: " + w.yes + " " + yes + ", " + w.no + " " + no + ".", "tally");
+    var lead = g.mode === "solo" ? juror(g.lead) : null;
+    say(g, null, (lead ? lead.short : "The foreperson") + " reads the ballots: " + w.yes + " " + yes + ", " + w.no + " " + no + ".", "tally");
     if (yes >= need) d.verdict = w.yesId;
     else if (no >= need) d.verdict = w.noId;
     else if (d.round > ROUNDS) d.verdict = "mistrial";
-    else say(g, g.mode === "solo" ? "ruth" : null, "That's not enough to reach a verdict. We need " + need + " of 6 to agree. Let's keep talking.");
+    else if (lead) say(g, lead.id, lead.say.noVerdict.replace("{need}", need));
+    else say(g, null, "That's not enough to reach a verdict. We need " + need + " of 6 to agree. Let's keep talking.");
     if (d.verdict) g.phase = "verdict";
   }
 
@@ -821,6 +924,7 @@
     if (g.d) g.d.computers.forEach(function (id) { moods[id] = mood(c, g.d.leans[id]); });
     return {
       caseId: g.caseId,
+      code: g.code,
       phase: g.phase,
       beatIndex: g.beat,
       beatsLen: g.beats.length,
@@ -844,7 +948,7 @@
     NOTE_LIMIT: NOTE_LIMIT, ROUNDS: ROUNDS, SEATS: SEATS, NAME_MAX: NAME_MAX,
     findCase: findCase, juror: juror, words: words, threshold: threshold, needed: needed, initials: initials,
     mood: mood, exhibit: exhibit, castOf: castOf, person: person,
-    createGame: createGame, join: join, setConnected: setConnected, seats: seats, computers: computers,
+    createGame: createGame, newReplayCode: newReplayCode, cleanReplayCode: cleanReplayCode, startMood: startMood, join: join, setConnected: setConnected, seats: seats, computers: computers,
     APPROACHES: APPROACHES, APPROACH_WORDS: APPROACH_WORDS,
     FACT_MS: FACT_MS, setClock: function (fn) { now = fn; }, factTimes: factTimes,
     available: available, flagLines: flagLines, TRIES: TRIES, apply: apply, report: report, viewFor: viewFor

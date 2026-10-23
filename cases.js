@@ -1,9 +1,15 @@
 // All cases are made up. Some borrow the general shape of common real-world
 // case types, but every name, place, and fact here is invented.
 //
-// The five computer jurors who deliberate with the player. They are the same
-// people in every case. `likes` lists the kinds of evidence that move them
-// most; `sway` is how easily they change their mind (1 = average).
+// The juror pool: every computer juror the game can choose from. Each game
+// picks five of them using its replay code. `likes` lists the kinds of
+// evidence that move them most; `sway` is how easily they change their mind
+// (1 = average). `outlook` shifts where their mood starts in every criminal or
+// civil case (positive = toward guilty or liable). `takes` are their first
+// comments in the jury room when a case doesn't write its own. `leads` marks
+// jurors who can be the foreperson in solo play; `say.lead` and
+// `say.noVerdict` are their foreperson lines, and `say.struck` is the reminder
+// any juror gives when someone argues with a fact the judge threw out.
 window.JURORS = [
   {
     id: "ruth", name: "Ruth Abernathy", short: "Ruth", job: "Retired schoolteacher",
@@ -23,11 +29,18 @@ window.JURORS = [
       character: { moved: "How someone behaves does tell you something.", unmoved: "We're judging the evidence, not the person." }
     },
     likes: ["procedure", "records"], sway: 0.9,
+    leads: true,
+    takes: {
+      criminal: "Before we start: the State has to prove this beyond a reasonable doubt. Let's hold them to that.",
+      civil: "The judge gave us the standard. Let's measure the evidence against that and nothing else."
+    },
     say: {
       agree: "Exactly my thinking.",
       moved: "That's a fair point. I hadn't weighed it that way.",
       unmoved: "I'm not sure that's enough to change my mind.",
-      struck: "Hold on. The judge told us we can't use that. Let's stick to the evidence."
+      struck: "Hold on. The judge told us we can't use that. Let's stick to the evidence.",
+      lead: "Let's go around the table and hear everyone's first impression before we argue about anything.",
+      noVerdict: "That's not enough to reach a verdict. We need {need} of 6 to agree. Let's keep talking."
     }
   },
   {
@@ -48,10 +61,18 @@ window.JURORS = [
       character: { moved: "Okay, patterns of behavior matter.", unmoved: "That's anecdotal." }
     },
     likes: ["records", "timeline"], sway: 1,
+    leads: true,
+    takes: {
+      criminal: "I want to see the timeline and the records before I believe anyone's story.",
+      civil: "Let's start with what's documented. Everything else is just people talking."
+    },
     say: {
       agree: "Right. The facts back that up.",
       moved: "Huh. That changes the math for me.",
-      unmoved: "Maybe, but that doesn't really line up with the records."
+      unmoved: "Maybe, but that doesn't really line up with the records.",
+      struck: "Wait, that answer was struck. We can't count it.",
+      lead: "Okay, let's be systematic. First impressions, then we go through the evidence.",
+      noVerdict: "We're short. We need {need} of 6. Let's look at what's still unresolved."
     }
   },
   {
@@ -72,10 +93,18 @@ window.JURORS = [
       character: { moved: "That tells me a lot about who they are.", unmoved: "Good people do bad things, and the other way around." }
     },
     likes: ["motive", "character", "witness"], sway: 1.1,
+    leads: false,
+    takes: {
+      criminal: "Before anything else, I want to understand why. Why would someone do this, or not?",
+      civil: "Somebody lost something here. I want to know who's being straight with us."
+    },
     say: {
       agree: "Yes. That's how I see it too.",
       moved: "Oh. I hadn't thought about it like that.",
-      unmoved: "I hear you, but my gut still says otherwise."
+      unmoved: "I hear you, but my gut still says otherwise.",
+      struck: "The judge said to forget that one. It wouldn't be fair to use it.",
+      lead: "Let's hear how everyone's feeling first.",
+      noVerdict: "We're not there yet. We need {need} of 6. Let's keep listening to each other."
     }
   },
   {
@@ -96,10 +125,19 @@ window.JURORS = [
       character: { moved: "That tells you what kind of person we're dealing with.", unmoved: "Nice guy, bad guy, doesn't matter to me." }
     },
     likes: ["physical"], sway: 0.6,
+    leads: false,
+    outlook: { criminal: 20, civil: -10 },
+    takes: {
+      criminal: "Look, people don't end up on trial for nothing. Show me why I'm wrong.",
+      civil: "People sue over everything these days. They'd better have something real."
+    },
     say: {
       agree: "Now you're talking.",
       moved: "...Alright. That one I can't argue with.",
-      unmoved: "Nah. Not buying it."
+      unmoved: "Nah. Not buying it.",
+      struck: "Judge threw that out. Can't use it, even if I'd like to.",
+      lead: "Fine, I'll run this. Everybody say your piece, quick.",
+      noVerdict: "Not enough. We need {need} of 6. Somebody's gonna have to budge."
     }
   },
   {
@@ -120,10 +158,181 @@ window.JURORS = [
       character: { moved: "Alright, that says something.", unmoved: "Character attacks don't prove anything." }
     },
     likes: ["procedure", "expert"], sway: 1,
+    leads: false,
+    outlook: { criminal: -20 },
+    takes: {
+      criminal: "The State has the burden here. I want to see whether they actually did their homework.",
+      civil: "I'm going to look hard at how the evidence was gathered, and by who."
+    },
     say: {
       agree: "Thank you. Finally someone said it.",
       moved: "Okay, that's actually a good point.",
-      unmoved: "That doesn't really prove anything though."
+      unmoved: "That doesn't really prove anything though.",
+      struck: "No, the judge struck that. That's literally the rule.",
+      lead: "Let's hear from everyone, and nobody gets talked over.",
+      noVerdict: "Not enough. We need {need} of 6. Let's keep going."
+    }
+  },
+  {
+    id: "marisol", name: "Marisol Vega", short: "Marisol", job: "Salon owner",
+    bio: "Wants everyone to get along. Listens to how witnesses come across, and often goes with the room.",
+    look: {skin: 2, hair: "long", hairColor: "chestnut", clothes: "#a8456a"},
+    react: { agree: ["Oh, good.", "Aw."], against: ["Oh.", "Yikes."] },
+    faces: { agree: "surprised", against: "sad" },
+    approaches: { likes: "question", dislikes: "press" },
+    replies: {
+      records: { moved: "Oh, it's right there in writing. Okay.", unmoved: "Papers are papers. I care about the people." },
+      timeline: { moved: "When you put it that way, the timing does fit.", unmoved: "I get mixed up with times. I'm not sure." },
+      motive: { moved: "Oh, I can see why they'd do that.", unmoved: "Everybody has their reasons. That doesn't mean they did it." },
+      physical: { moved: "Well, you can't argue with that, can you?", unmoved: "Things can get moved around, though." },
+      procedure: { moved: "That doesn't seem fair at all.", unmoved: "I'm sure they were doing their best." },
+      expert: { moved: "If the expert says so, that's good enough for me.", unmoved: "The expert seemed nice, but I don't know." },
+      witness: { moved: "I believed them. They seemed so sincere.", unmoved: "I didn't get a good feeling from that witness." },
+      character: { moved: "That tells you what kind of person they are.", unmoved: "Oh, I don't like judging people like that." }
+    },
+    likes: ["character", "witness"], sway: 1.3,
+    leads: false,
+    takes: {
+      criminal: "I just want us to be fair to everybody. What does everyone else think?",
+      civil: "Honestly, I felt for both of them. I want to hear what the rest of you think."
+    },
+    say: {
+      agree: "Yes! I was thinking the same thing.",
+      moved: "Oh, you're right. I can see that now.",
+      unmoved: "I don't know... I'd like to hear what everyone else thinks.",
+      struck: "Oh, I don't think we're allowed to use that one.",
+      lead: "Okay! Let's go around and everyone share, nice and easy.",
+      noVerdict: "Oh no, we need {need} of 6. Let's keep talking, we'll get there."
+    }
+  },
+  {
+    id: "gordon", name: "Gordon Pike", short: "Gordon", job: "Retired insurance adjuster",
+    bio: "Spent 30 years checking claims. Trusts paperwork and experts, and is sure he's seen it all before.",
+    look: {skin: 0, hair: "side", hairColor: "gray", older: true, glasses: true, clothes: "#5b6b3a"},
+    react: { agree: ["Figured.", "Mm-hm."], against: ["Hm, no.", "Doubt it."] },
+    faces: { agree: "smug", against: "angry" },
+    approaches: { likes: "facts", dislikes: "question" },
+    replies: {
+      records: { moved: "Now that's documentation. That I trust.", unmoved: "I've seen records like that fudged a hundred times." },
+      timeline: { moved: "The timeline checks out. I'd have caught it otherwise.", unmoved: "Timelines get padded. I've seen it." },
+      motive: { moved: "Follow the money. Always.", unmoved: "Motive is the oldest story in the book. Prove it." },
+      physical: { moved: "Physical evidence. Hard to fake. Agreed.", unmoved: "That kind of evidence is easy to misread." },
+      procedure: { moved: "Sloppy work. I'd have sent that file back.", unmoved: "Every file has a few loose ends. That's normal." },
+      expert: { moved: "The expert's right. I've seen the same thing myself.", unmoved: "I've worked with plenty of experts. That one overreached." },
+      witness: { moved: "Fine. That witness stayed consistent.", unmoved: "Witnesses exaggerate. Every single time." },
+      character: { moved: "Patterns of behavior. I've seen it before.", unmoved: "Character doesn't belong in a claim file." }
+    },
+    likes: ["records", "expert"], sway: 0.7,
+    leads: true,
+    outlook: { civil: -6 },
+    takes: {
+      criminal: "I've seen a lot of cases like this one. The paperwork will tell us more than any witness.",
+      civil: "Thirty years of claims taught me one thing: people overstate what they lost. Let's see the paperwork."
+    },
+    say: {
+      agree: "That matches what I'd have found myself.",
+      moved: "Well. That's not what I expected, but fine, it counts.",
+      unmoved: "I've seen this sort of thing before. That's not how it works.",
+      struck: "That was struck. It doesn't go in the file.",
+      lead: "I'll take foreperson. I've run plenty of review meetings. First impressions, then evidence.",
+      noVerdict: "We need {need} of 6, and we're not there. Let's review the file again."
+    }
+  },
+  {
+    id: "june", name: "June Takahashi", short: "June", job: "Librarian",
+    bio: "Says little and notices a lot. Keeps track of what happened when, and whether things were done properly.",
+    look: {skin: 2, hair: "short", hairColor: "black", glasses: true, clothes: "#3b6e7a"},
+    react: { agree: ["Mm.", "Yes."], against: ["Hm.", "..."] },
+    faces: { agree: "calm", against: "surprised" },
+    approaches: { likes: "question", dislikes: "press" },
+    replies: {
+      records: { moved: "It's recorded.", unmoved: "Records can be wrong." },
+      timeline: { moved: "The times fit.", unmoved: "The times don't fit." },
+      motive: { moved: "Possible.", unmoved: "A reason isn't proof." },
+      physical: { moved: "That's real.", unmoved: "That proves less than it seems." },
+      procedure: { moved: "That wasn't done properly.", unmoved: "That was done properly enough." },
+      expert: { moved: "The expert was careful.", unmoved: "The expert overstated it." },
+      witness: { moved: "I believed that.", unmoved: "I didn't believe that." },
+      character: { moved: "That's telling.", unmoved: "Not relevant." }
+    },
+    likes: ["timeline", "procedure"], sway: 0.9,
+    leads: true,
+    takes: {
+      criminal: "I'm still listening.",
+      civil: "Let's look at the order things happened in."
+    },
+    say: {
+      agree: "Agreed.",
+      moved: "...Yes. That's right.",
+      unmoved: "Not for me.",
+      struck: "That was struck.",
+      lead: "Let's each say one thing. Briefly.",
+      noVerdict: "{need} of 6 needed. Not yet."
+    }
+  },
+  {
+    id: "ray", name: "Ray Kowalski", short: "Ray", job: "Retired police sergeant",
+    bio: "Twenty-five years on the force. Trusts police work and hard evidence, and he's not easy to move.",
+    look: {skin: 1, hair: "buzz", hairColor: "gray", older: true, facial: "mustache", clothes: "#2f3e5c"},
+    react: { agree: ["Yep.", "Good work."], against: ["Come on.", "Nope."] },
+    faces: { agree: "smug", against: "angry" },
+    approaches: { likes: "press", dislikes: "question" },
+    replies: {
+      records: { moved: "Paper trail. That's how you build a case.", unmoved: "Records only tell you so much." },
+      timeline: { moved: "Timeline's tight. Good work.", unmoved: "Timelines have gaps. Doesn't mean anything." },
+      motive: { moved: "Motive, means, opportunity. There it is.", unmoved: "Plenty of folks have a motive. Doesn't make it so." },
+      physical: { moved: "Physical evidence doesn't lie. I'm with you.", unmoved: "That evidence doesn't say what you want it to." },
+      procedure: { moved: "...That's not how we did it. That's a problem.", unmoved: "Officers make judgment calls. That's the job." },
+      expert: { moved: "The lab work holds up. Fair.", unmoved: "Experts for hire. I've sat across from plenty." },
+      witness: { moved: "Good witness. Solid.", unmoved: "Witnesses get things wrong all the time. I took the statements." },
+      character: { moved: "Yeah, I've met people like that.", unmoved: "Doesn't matter if they're nice. Evidence matters." }
+    },
+    likes: ["physical", "procedure"], sway: 0.6,
+    leads: false,
+    outlook: { criminal: 15 },
+    takes: {
+      criminal: "In my experience, police don't bring a case like this without a good reason. Convince me otherwise.",
+      civil: "I took a lot of reports in my day. The story with evidence behind it is usually the true one."
+    },
+    say: {
+      agree: "That's solid. Good.",
+      moved: "...Okay. I'd have flagged that on the job too.",
+      unmoved: "I've seen a hundred of these. Doesn't change it.",
+      struck: "Judge threw that out. Rules are rules, even when I don't like them.",
+      lead: "Alright, let's run this like a briefing. Everybody report in.",
+      noVerdict: "We need {need} of 6. We're not there. Keep working it."
+    }
+  },
+  {
+    id: "bree", name: "Bree Callahan", short: "Bree", job: "Restaurant manager",
+    bio: "Came straight from a double shift. Wants to reach a verdict, and respects people who get to the point.",
+    look: {skin: 4, hair: "ponytail", hairColor: "black", clothes: "#a3532b"},
+    react: { agree: ["Okay!", "Yes. Next."], against: ["Ugh.", "Seriously?"] },
+    faces: { agree: "smug", against: "angry" },
+    approaches: { likes: "press", dislikes: "facts" },
+    replies: {
+      records: { moved: "It's in writing. Done. Next.", unmoved: "Paperwork doesn't settle it. Next." },
+      timeline: { moved: "Okay, the timing works. Moving on.", unmoved: "The timing doesn't add up. Next point." },
+      motive: { moved: "Yeah, that's a reason. Got it.", unmoved: "Everyone needs money. So what?" },
+      physical: { moved: "Fine, that's real evidence. Okay.", unmoved: "That doesn't prove much. Can we keep going?" },
+      procedure: { moved: "If they messed up, they messed up. Noted.", unmoved: "Nobody's perfect at their job. Next." },
+      expert: { moved: "The expert says so? Fine.", unmoved: "Long story. Didn't buy it." },
+      witness: { moved: "Okay, I believe them. Next.", unmoved: "That witness rambled. Not convinced." },
+      character: { moved: "Okay, that says something.", unmoved: "I don't care if they're nice. What happened?" }
+    },
+    likes: ["timeline", "motive"], sway: 1.2,
+    leads: false,
+    takes: {
+      criminal: "Let's not drag this out. Give me the motive and the timeline and I'll decide.",
+      civil: "Let's not drag this out. Who did what, and when? That's what I want to know."
+    },
+    say: {
+      agree: "Great, we agree. Can we vote?",
+      moved: "Fine, fine. You've got me there.",
+      unmoved: "That's not it. Next point.",
+      struck: "That got thrown out. Don't waste our time with it.",
+      lead: "Okay, quick round. Thirty seconds each, go.",
+      noVerdict: "Not enough? We need {need} of 6. Okay, let's speed this up."
     }
   }
 ];
@@ -160,8 +369,11 @@ window.JURORS = [
 //   each way.
 // A fact can also list rebuts: ["id"] (the facts it answers in deliberation)
 //   and replies: { juror: { moved, unmoved } } for that juror's reply to it.
-// jury.start: each juror's starting opinion, 0 to 100 (100 = sure of guilt).
-// jury.takes: what each juror says first in the jury room.
+// jury.base: where computer jurors' moods start, 0 to 100 (100 = sure of
+//   guilt), before their outlook and a small shift from the replay code.
+// jury.start: optional starting moods for particular jurors, which replace
+//   the formula for them. jury.takes: optional first comments for particular
+//   jurors; everyone else uses the template for criminal or civil cases.
 // jury.points: arguments the computer jurors raise during deliberation.
 // truth.lawful: the verdict the evidence at trial supports under the law.
 // truth.actual: what really happened.
@@ -370,7 +582,8 @@ window.CASES = [
       }
     ],
     jury: {
-      start: { ruth: 50, dev: 62, carla: 55, hank: 82, tasha: 30 },
+      base: 56, holdout: 82,
+      start: { ruth: 50, dev: 62, carla: 55, tasha: 30 },
       takes: {
         ruth: "Before we start: the State has to prove this beyond a reasonable doubt. Let's hold them to that.",
         dev: "The shortages line up pretty well with her shifts. I'd need a good reason to ignore that.",
@@ -420,21 +633,21 @@ window.CASES = [
       defense: { label: "Gary Brandt", lawyer: "Attorney Tom Reyes" }
     },
     cards: {
-      "warning-signs": { title: "The lean, dead limbs and mushrooms were visible for years", dir: 1, power: 2, tags: ["physical"] },
-      "letter": { title: "Joan warned Gary in writing eight months before", dir: 1, power: 3, tags: ["records"], rebuts: ["rick-experienced"], replies: { carla: { moved: "She put it in writing and offered to pay half. What else could she do?" }, hank: { unmoved: "A neighbor's note isn't a tree expert." } } },
+      "warning-signs": { title: "The lean, dead limbs and mushrooms were visible for years", dir: 1, power: 1, tags: ["physical", "witness"] },
+      "letter": { title: "Joan warned Gary in writing eight months before", dir: 1, power: 2, tags: ["records", "timeline"], rebuts: ["rick-experienced"], replies: { carla: { moved: "She put it in writing and offered to pay half. What else could she do?" }, hank: { unmoved: "A neighbor's note isn't a tree expert." } } },
       "insurance": { title: "Joan's insurance already paid part of her loss", dir: -1, power: 2, tags: ["records"], struck: true },
       "maple": { title: "A maple two houses down also fell in the storm", dir: -1, power: 1, tags: ["physical"] },
       "rot-70": { title: "The trunk was 70% rotten where it broke", dir: 1, power: 3, tags: ["expert", "physical"], rebuts: ["storm-63", "healthy-fell"], replies: { hank: { moved: "Seventy percent hollow. I've seen beams like that. They go." }, tasha: { unmoved: "The plaintiff paid for that number." } } },
-      "detectable": { title: "A 10-minute drill test would have found the rot", dir: 1, power: 2, tags: ["expert", "procedure"] },
+      "detectable": { title: "A 10-minute drill test would have found the rot", dir: 1, power: 3, tags: ["expert", "procedure"] },
       "would-survive": { title: "A healthy oak would more likely than not have survived", dir: 1, power: 2, tags: ["expert"] },
       "paid-expert": { title: "The arborist is paid $250 an hour to testify", dir: -1, power: 1, tags: ["expert"] },
       "healthy-fell": { title: "Some healthy trees fell in the storm too", dir: -1, power: 2, tags: ["expert", "physical"], rebuts: ["would-survive", "rot-70"] },
       "not-certain": { title: "The expert can't say for sure the tree would have survived", dir: -1, power: 2, tags: ["expert"], rebuts: ["would-survive"] },
-      "rick-experienced": { title: "Rick has 20 years of experience with trees", dir: -1, power: 2, tags: ["character"], rebuts: ["not-certified"] },
+      "rick-experienced": { title: "Rick has 20 years of experience with trees", dir: -1, power: 2, tags: ["character", "witness"], rebuts: ["not-certified"] },
       "storm-63": { title: "Gary's weather station recorded a 63 mph gust", dir: -1, power: 2, tags: ["physical", "records"], rebuts: ["letter", "warning-signs"], replies: { dev: { moved: "Sixty-three miles an hour is a real storm. That's a factor." }, carla: { unmoved: "Storms happen. Joan warned him anyway." } } },
       "not-certified": { title: "Rick is not a certified arborist", dir: 1, power: 1, tags: ["expert"], rebuts: ["rick-experienced"] },
       "sidewalk-look": { title: "Rick only looked from the sidewalk, for about 10 minutes", dir: 1, power: 3, tags: ["procedure"], rebuts: ["rick-experienced"], replies: { ruth: { moved: "Ten minutes from the sidewalk isn't an inspection." }, hank: { unmoved: "Plenty of guys can size up a tree from the curb." } } },
-      "declined-split": { title: "Gary turned down Joan's offer to split an inspection", dir: 1, power: 2, tags: ["character"] },
+      "declined-split": { title: "Gary turned down Joan's offer to split an inspection", dir: 1, power: 3, tags: ["character", "motive"] },
       "rick-absent": { title: "Rick didn't come to court to be questioned", dir: 1, power: 1, tags: ["procedure"] },
       "no-mulch": { title: "There was no mulch around the oak, just bare dirt", dir: 1, power: 1, tags: ["physical"] },
       "week-later": { title: "Dr. Achebe examined the stump and trunk about a week after the storm", dir: 1, power: 1, tags: ["expert"] },
@@ -592,7 +805,8 @@ window.CASES = [
       }
     ],
     jury: {
-      start: { ruth: 48, dev: 42, carla: 62, hank: 24, tasha: 38 },
+      base: 44, holdout: 36,
+      start: { ruth: 48, dev: 42, carla: 62, tasha: 38 },
       takes: {
         ruth: "Remember, this is civil. More likely than not. That's a much lower bar than a criminal case.",
         dev: "For me it comes down to whether the tree would've fallen anyway.",
@@ -841,7 +1055,8 @@ window.CASES = [
       }
     ],
     jury: {
-      start: { ruth: 58, dev: 55, carla: 78, hank: 84, tasha: 24 },
+      base: 60, holdout: 84,
+      start: { ruth: 58, dev: 55, carla: 78, tasha: 24 },
       takes: {
         ruth: "The judge gave us a list of things to weigh about the identification. I think we should actually go through it.",
         dev: "The gym timeline is tight but possible. I can't rule him in or out on that alone.",
