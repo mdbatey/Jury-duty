@@ -41,6 +41,7 @@
     screen: "home", pickMode: "solo",
     g: null, showNotebook: false, sel: null, target: null,
     host: null, conns: [], code: null, hostError: null, sig: "",
+    offOpen: false, offLine: -1, flagMsg: null, flagSeen: 0,
     phone: null, view: null, phoneStatus: "", phoneError: "", retries: 0, lastHeard: 0, editing: false, joinCode: ""
   };
 
@@ -356,13 +357,54 @@
       if (me.askUsed) extra += '<p class="muted small">You have already used your one question.</p>';
       else extra += askButtons(c, b) + '<p class="muted small">Or tap Next to skip your question.</p>';
     }
+    if (ui.flagMsg && ui.flagMsg.beat === g.beat) extra += flagResultHtml(c, ui.flagMsg.flag);
+    else if (E.flagLines(g).indexOf(g.beat) >= 0 && me.tries > 0) extra += offHtml(c, me, "");
     var last = g.beat === g.beats.length - 1;
     return phaseHtml(b, g.beat, g.beats.length) + speechHtml(c, b, extra) +
       '<div class="dialog-nav">' +
       '<button class="btn ghost" data-action="back"' + (g.beat === 0 ? " disabled" : "") + ">Back</button>" +
       '<button class="btn ghost" data-action="notebook">Notebook ' + me.notebook.length + "/" + E.NOTE_LIMIT + "</button>" +
       '<button class="btn" data-action="advance" id="next-btn">' + (last ? "Go to the jury room" : "Next") + "</button></div>" +
-      (ui.showNotebook ? notebookHtml(c, me.notebook, true) : "");
+      (ui.showNotebook ? notebookHtml(c, me.notebook, true, me.bonus) : "");
+  }
+
+  // "Something's off": pick the notebook fact this testimony conflicts with.
+  // prefix is "" for solo play and "m-" for phones.
+  function offHtml(c, me, prefix) {
+    var left = me.tries + (me.tries === 1 ? " try" : " tries") + " left";
+    // In solo play the panel belongs to the line it was opened on.
+    var open = prefix === "m-" ? ui.offOpen === true : ui.offOpen === ui.g.beat;
+    if (!open) {
+      return '<div class="off-row"><button class="btn ghost off-btn" data-action="' + prefix + 'off-open">Something\'s off</button><span class="muted small">' + left + "</span></div>";
+    }
+    var lines = "";
+    if (prefix === "m-" && me.flagLines.length) {
+      var chosen = lineToFlag(me);
+      lines = '<p class="muted small">Which line?</p><div class="ask">' + me.flagLines.slice().reverse().map(function (l) {
+        return '<button class="btn ghost ask-btn' + (l.i === chosen ? " on" : "") + '" data-action="m-off-line" data-i="' + l.i + '" aria-pressed="' + (l.i === chosen) + '">' + esc(l.text) + "</button>";
+      }).join("") + '</div><p class="muted small">Conflicts with:</p>';
+    }
+    var facts = me.notebook.length
+      ? lines + '<div class="ask">' + me.notebook.map(function (id) {
+        return '<button class="btn ghost ask-btn" data-action="' + prefix + 'off-pick" data-card="' + id + '">' + esc(c.cards[id].title) + "</button>";
+      }).join("") + "</div>"
+      : '<p class="muted small">Your notebook is empty. You can only catch a contradiction with a fact you wrote down.</p>';
+    return '<div class="off-panel"><p><b>Which fact in your notebook does this conflict with?</b> <span class="muted small">' + left + ". A wrong guess uses one.</span></p>" + facts +
+      '<button class="btn-link" data-action="' + prefix + 'off-cancel">Never mind</button></div>';
+  }
+
+  function lineToFlag(me) {
+    var ids = me.flagLines.map(function (l) { return l.i; });
+    return ids.indexOf(ui.offLine) >= 0 ? ui.offLine : ids[ids.length - 1];
+  }
+
+  function flagResultHtml(c, f) {
+    if (f.ok) {
+      var card = c.cards[f.id];
+      return '<div class="flag-result ok" role="status"><p class="eyebrow">You caught a contradiction</p><p><b>' + esc(card.title) + "</b></p><p>" + esc(card.explain) +
+        '</p><p class="muted small">Bonus fact added. It doesn\'t use a notebook slot.</p></div>';
+    }
+    return '<div class="flag-result miss" role="status"><p><b>That doesn\'t seem to conflict.</b> ' + (f.tries ? f.tries + (f.tries === 1 ? " try" : " tries") + " left." : "No tries left this trial.") + "</p></div>";
   }
 
   function askButtons(c, b) {
@@ -372,13 +414,16 @@
     }).join("") + "</div>";
   }
 
-  function notebookHtml(c, notes, removable) {
+  function notebookHtml(c, notes, removable, bonus) {
     var list = notes.length
       ? notes.map(function (id) {
         return "<li><span>" + esc(c.cards[id].title) + "</span>" + (removable ? '<button class="btn-link" data-action="unnote" data-card="' + id + '">Remove</button>' : "") + "</li>";
       }).join("")
       : '<li class="muted">Nothing yet. Tap "Write it down" when a witness says something important.</li>';
-    return '<div class="notebook"><p class="eyebrow">Juror notebook</p><ol>' + list + "</ol></div>";
+    var extra = bonus && bonus.length
+      ? '<p class="eyebrow">Bonus facts</p><ul class="plain">' + bonus.map(function (id) { return "<li>" + esc(c.cards[id].title) + "</li>"; }).join("") + "</ul>"
+      : "";
+    return '<div class="notebook"><p class="eyebrow">Juror notebook</p><ol>' + list + "</ol>" + extra + "</div>";
   }
 
   function tableSeat(i) {
@@ -407,8 +452,8 @@
     var hand = notes.filter(function (id) { return used.indexOf(id) < 0; });
     var cards = hand.length ? hand.map(function (id) {
       var card = c.cards[id];
-      return '<button class="fact' + (ui.sel === id ? " selected" : "") + '" data-action="select" data-card="' + id + '" aria-pressed="' + (ui.sel === id) + '">' +
-        esc(card.title) + '<span class="fact-tags">' + card.tags.map(esc).join(" · ") + "</span></button>";
+      return '<button class="fact' + (card.bonus ? " bonus" : "") + (ui.sel === id ? " selected" : "") + '" data-action="select" data-card="' + id + '" aria-pressed="' + (ui.sel === id) + '">' +
+        esc(card.title) + '<span class="fact-tags">' + (card.bonus ? "bonus fact · " : "") + card.tags.map(esc).join(" · ") + "</span></button>";
     }).join("") : '<p class="muted small">Your notebook has nothing left to use. You can still listen to the others and vote.</p>';
     return { count: hand.length, html: '<div class="hand">' + cards + "</div>" };
   }
@@ -429,7 +474,7 @@
     var c = E.findCase(g.caseId);
     var d = g.d;
     var me = g.humans[0];
-    var hand = handHtml(c, me.notebook, me.used);
+    var hand = handHtml(c, me.notebook.concat(me.bonus), me.used);
     var controls;
     if (d.voting) {
       controls = '<div class="vote-box"><p><b>Cast your vote.</b> ' + (c.kind === "criminal" ? "All six must agree." : "Five of six must agree.") + "</p>" + voteButtons(c) +
@@ -873,7 +918,13 @@
       ask = '<section class="panel"><p class="eyebrow">Your juror question</p><p class="muted small">You get one question this trial. The first juror to send one gets it asked.</p><div class="ask">' +
         s.jurorQuestion.map(function (q, i) { return '<button class="btn ghost ask-btn" data-action="m-ask" data-i="' + i + '">' + esc(q.q) + "</button>"; }).join("") + "</div></section>";
     }
-    return line + controls + ask + facts + notebookHtml(c, me.notebook, true).replace("Juror notebook", "Your notebook " + me.notebook.length + "/" + E.NOTE_LIMIT);
+    var off = "";
+    if (me.lastFlag && me.lastFlag.seq > ui.flagSeen) {
+      off = '<section class="panel">' + flagResultHtml(c, me.lastFlag) + '<button class="btn ghost" data-action="m-off-ok">OK</button></section>';
+    } else if (me.tries > 0 && me.flagLines.length) {
+      off = '<section class="panel">' + offHtml(c, me, "m-") + "</section>";
+    }
+    return line + controls + ask + off + facts + notebookHtml(c, me.notebook, true, me.bonus).replace("Juror notebook", "Your notebook " + me.notebook.length + "/" + E.NOTE_LIMIT);
   }
 
   function phoneDeliberation(v, c, fore) {
@@ -902,7 +953,7 @@
         var said = me.choice.fact ? "You'll say: " + c.cards[me.choice.fact].title + (me.choice.target === "all" ? " (to the whole table)" : " (to " + E.juror(me.choice.target).short + ")") : "You'll let the others talk.";
         parts.push('<div class="vote-box"><p>' + esc(said) + "</p><p class=\"muted small\">Waiting for the others (" + chosenCount + " of " + live.length + ').</p><button class="btn-link" data-action="m-change">Change my choice</button></div>');
       } else {
-        var hand = handHtml(c, me.notebook, me.used);
+        var hand = handHtml(c, me.notebook.concat(me.bonus), me.used);
         parts.push(hand.html + (v.computers.length ? targetsHtml(v.computers) : ""));
         parts.push('<div class="dialog-nav"><button class="btn ghost" data-action="m-pass">Let others talk</button>' +
           '<button class="btn" data-action="m-speak"' + (ui.sel && (ui.target || !v.computers.length) ? "" : " disabled") + ">Make your point</button></div>");
@@ -1025,6 +1076,7 @@
       // Solo
       case "start-case":
         resetTyping();
+        ui.offOpen = false; ui.flagMsg = null;
         ui.g = E.createGame(b.dataset.id, "solo");
         ui.showNotebook = false; ui.sel = null; ui.target = null;
         go("solo");
@@ -1086,6 +1138,25 @@
       case "m-advance": phoneSend({ type: "advance" }); break;
       case "m-back": phoneSend({ type: "back" }); break;
       case "m-write": phoneSend({ type: "write", fact: b.dataset.card }); break;
+      case "off-open": ui.offOpen = ui.g.beat; showDialog(); break;
+      case "m-off-open": ui.offOpen = true; renderPhoneKeepScroll(); break;
+      case "off-cancel": case "m-off-cancel": ui.offOpen = false; if (ui.screen === "phone") renderPhoneKeepScroll(); else showDialog(); break;
+      case "off-pick":
+        if (E.apply(ui.g, 0, { type: "flag", line: ui.g.beat, fact: b.dataset.card })) {
+          ui.flagMsg = { beat: ui.g.beat, flag: ui.g.humans[0].lastFlag };
+        }
+        ui.offOpen = false;
+        showDialog();
+        break;
+      case "m-off-line": ui.offLine = Number(b.dataset.i); renderPhoneKeepScroll(); break;
+      case "m-off-pick":
+        phoneSend({ type: "flag", line: lineToFlag(ui.view.me), fact: b.dataset.card });
+        ui.offOpen = false;
+        break;
+      case "m-off-ok":
+        ui.flagSeen = ui.view.me.lastFlag ? ui.view.me.lastFlag.seq : ui.flagSeen;
+        renderPhoneKeepScroll();
+        break;
       case "m-ask": phoneSend({ type: "ask", i: Number(b.dataset.i) }); break;
       case "m-speak":
         if (ui.sel) {

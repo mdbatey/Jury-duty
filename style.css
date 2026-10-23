@@ -400,6 +400,15 @@ p { margin: 0; }
 .lobby-seat .small-portrait { width: 2.4rem; height: 2.4rem; align-items: center; }
 .tok .face, .seat .face { pointer-events: none; }
 
+.off-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding-top: 0.75rem; border-top: 1px dashed var(--line); }
+.off-btn { border-color: var(--def); color: var(--def); }
+.off-panel { display: flex; flex-direction: column; gap: 0.5rem; padding-top: 0.75rem; border-top: 1px dashed var(--line); }
+.ask-btn.on { border-color: var(--brass); background: var(--brass-soft); }
+.flag-result { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.75rem 1rem; border-radius: 6px; margin-top: 0.5rem; }
+.flag-result.ok { background: var(--brass-soft); border-left: 4px solid var(--no); }
+.flag-result.miss { background: var(--paper); border-left: 4px solid var(--def); }
+.fact.bonus { border-left-color: var(--no); }
+
 @media (prefers-reduced-motion: reduce) {
   .tok { transition: none; }
   .tok.speaking .ring, .vote-card, .objection-banner.show { animation: none; }
