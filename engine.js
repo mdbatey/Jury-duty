@@ -5,6 +5,15 @@
   "use strict";
 
   var CASES = window.CASES || [];
+  var TRIES = 3;
+
+  // Each contradiction's bonus fact joins the case's facts, so it can be
+  // argued like any other fact once a juror earns it.
+  CASES.forEach(function (c) {
+    (c.contradictions || []).forEach(function (x) {
+      c.cards[x.id] = Object.assign({ bonus: true, explain: x.explain }, x.bonus);
+    });
+  });
   var JURORS = window.JURORS || [];
   var NOTE_LIMIT = 7;
   var ROUNDS = 6;
@@ -167,7 +176,7 @@
             } else {
               beat({ who: part[1], text: l.q, phase: phase, step: si });
               // Witnesses look nervous under cross-examination unless a line says otherwise.
-              beat({ who: w, text: l.a, phase: phase, card: l.card, show: l.show, step: si, sfx: l.sfx, expression: l.expression || (part[0] === "Cross-examination" ? "nervous" : "calm") });
+              beat({ who: w, text: l.a, phase: phase, card: l.card, show: l.show, step: si, sfx: l.sfx, mark: l.mark, answer: true, expression: l.expression || (part[0] === "Cross-examination" ? "nervous" : "calm") });
             }
           });
           pos[part[1]] = part[1] === "dl" ? "d1" : "p1";
@@ -195,7 +204,7 @@
   }
 
   function newHuman(name, token) {
-    return { name: name, token: token || "", notebook: [], askUsed: false, strikes: 0, used: [], connected: true, choice: null, ballot: null, lastBallot: null };
+    return { name: name, token: token || "", notebook: [], bonus: [], found: [], tries: TRIES, flags: 0, lastFlag: null, askUsed: false, strikes: 0, used: [], connected: true, choice: null, ballot: null, lastBallot: null };
   }
 
   function cleanName(name) {
@@ -291,6 +300,40 @@
     return out;
   }
 
+  // Testimony lines a juror can flag with "Something's off". Same window as
+  // writing down facts: the current answer in solo, the current witness's
+  // answers so far in multiplayer.
+  function flagLines(g) {
+    var b = g.beats[g.beat];
+    if (!b || g.phase !== "trial") return [];
+    if (g.mode === "solo") return b.answer ? [g.beat] : [];
+    if (b.step === undefined) return [];
+    var out = [];
+    for (var i = 0; i <= g.beat; i++) if (g.beats[i].step === b.step && g.beats[i].answer) out.push(i);
+    return out;
+  }
+
+  function flag(g, h, line, fact) {
+    var me = g.humans[h];
+    if (!me || g.phase !== "trial" || me.tries <= 0) return false;
+    if (flagLines(g).indexOf(line) < 0 || me.notebook.indexOf(fact) < 0) return false;
+    var c = findCase(g.caseId);
+    var b = g.beats[line];
+    var hit = (c.contradictions || []).filter(function (x) {
+      return x.line === b.mark && x.conflictsWith === fact && me.found.indexOf(x.id) < 0;
+    })[0];
+    me.flags++;
+    if (hit) {
+      me.found.push(hit.id);
+      me.bonus.push(hit.id);
+      me.lastFlag = { seq: me.flags, ok: true, id: hit.id };
+    } else {
+      me.tries--;
+      me.lastFlag = { seq: me.flags, ok: false, tries: me.tries };
+    }
+    return true;
+  }
+
   // ---------- Actions ----------
 
   // h is the acting human's index, or -1 for the courtroom screen itself.
@@ -323,6 +366,8 @@
         return true;
       case "ask":
         return ask(g, h, a.i);
+      case "flag":
+        return flag(g, h, a.line, a.fact);
       case "choose":
         return delib && !g.d.voting && me ? choose(g, h, a) : false;
       case "closeTurn":
@@ -361,7 +406,7 @@
     var base = { pos: b.pos, phase: "Juror question", step: b.step };
     g.beats.splice(g.beat + 1, 0,
       Object.assign({}, base, { who: "judge", text: "A juror asks: \"" + q.q + "\" Please answer the question." }),
-      Object.assign({}, base, { who: b.witness, text: q.a, card: q.card, sfx: q.sfx, expression: q.expression || "calm" }));
+      Object.assign({}, base, { who: b.witness, text: q.a, card: q.card, mark: q.mark, answer: true, sfx: q.sfx, expression: q.expression || "calm" }));
     g.beat++;
     return true;
   }
@@ -404,7 +449,7 @@
     if (a.pass) {
       me.choice = { pass: true };
     } else {
-      if (me.notebook.indexOf(a.fact) < 0 || me.used.indexOf(a.fact) >= 0) return false;
+      if ((me.notebook.indexOf(a.fact) < 0 && me.bonus.indexOf(a.fact) < 0) || me.used.indexOf(a.fact) >= 0) return false;
       if (a.target !== "all" && g.d.computers.indexOf(a.target) < 0) return false;
       me.choice = { fact: a.fact, target: a.target };
     }
@@ -552,6 +597,8 @@
       rows.push({ title: "Your ballot", text: me.lastBallot ? "You voted " + word(me.lastBallot).toLowerCase() + ". The evidence at trial supports " + word(c.truth.lawful).toLowerCase() + "." : "You didn't cast a ballot.", ok: me.lastBallot === c.truth.lawful });
       rows.push({ title: "The jury followed the law", text: verdictRow, ok: v !== "mistrial" && v === c.truth.lawful });
     }
+    var total = (c.contradictions || []).length;
+    if (total) rows.push({ title: "Contradictions found", text: me.found.length + " of " + total + ".", ok: me.found.length > 0 });
     rows.push({ title: "Notes taken", text: good + " useful facts written down" + (badNotes ? ", plus " + badNotes + " the judge threw out" : "") + ". You asked " + (me.askUsed ? "one" : "no") + " juror question.", ok: good >= 5 && !badNotes });
     rows.push({ title: "Played by the rules", text: me.strikes ? "You used thrown-out evidence " + me.strikes + (me.strikes === 1 ? " time." : " times.") : "You only argued with admitted evidence.", ok: !me.strikes });
     return rows;
@@ -577,6 +624,8 @@
       d: g.d ? { round: g.d.round, log: g.d.log, voting: g.d.voting, verdict: g.d.verdict, tally: g.d.tally, moods: moods } : null,
       me: {
         h: h, name: me.name, notebook: me.notebook.slice(), used: me.used.slice(), askUsed: me.askUsed, strikes: me.strikes,
+        bonus: me.bonus.slice(), found: me.found.slice(), tries: me.tries, lastFlag: me.lastFlag,
+        flagLines: flagLines(g).map(function (i) { return { i: i, text: g.beats[i].text }; }),
         choice: me.choice, ballot: me.ballot, lastBallot: me.lastBallot, available: available(g),
         report: g.phase === "verdict" ? report(g, h) : null
       }
@@ -588,6 +637,6 @@
     findCase: findCase, juror: juror, words: words, threshold: threshold, needed: needed, initials: initials,
     mood: mood, exhibit: exhibit, castOf: castOf, person: person,
     createGame: createGame, join: join, setConnected: setConnected, seats: seats, computers: computers,
-    available: available, apply: apply, report: report, viewFor: viewFor
+    available: available, flagLines: flagLines, TRIES: TRIES, apply: apply, report: report, viewFor: viewFor
   };
 })();

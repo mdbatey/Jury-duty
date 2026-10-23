@@ -73,6 +73,7 @@ window.JURORS = [
 //                       angry, sad, smug, surprised). Default: nervous on
 //                       cross-examination, calm otherwise.
 //   sfx: "murmur"   the gallery murmurs after a surprising answer
+//   mark: "name"    names a line so a contradiction can point at it
 // Objection lines: { objection, by: "plaintiff" | "defense", ruling, note }
 //
 // cards: facts the player can collect and argue with in the jury room.
@@ -84,6 +85,11 @@ window.JURORS = [
 // looks: each character's portrait, keyed by their name as it appears in the
 //   case (skin 0-5 light to deep, hair, hairColor, facial, glasses, older,
 //   clothes). Anyone without a look gets one generated from their name.
+// contradictions: testimony that conflicts with an earlier fact. Each has an
+//   id, the conflicting line's mark (line), the earlier fact it conflicts with
+//   (conflictsWith), a bonus fact the finder earns (title, dir, power, tags),
+//   and an explanation shown when it's found. Give each case one pointing
+//   each way.
 // jury.start: each juror's starting opinion, 0 to 100 (100 = sure of guilt).
 // jury.takes: what each juror says first in the jury room.
 // jury.points: arguments the computer jurors raise during deliberation.
@@ -128,6 +134,8 @@ window.CASES = [
       "not-investigated": { title: "The detective never investigated Kyle", dir: -1, power: 2, tags: ["procedure"] },
       "slips-right": { title: "Dana says she counted twice and the slips were right", dir: -1, power: 1, tags: ["character"] },
       "kyle-advance": { title: "Kyle asked for a pay advance in April", dir: -1, power: 2, tags: ["motive", "records"] },
+      "safe-overnight": { title: "Dana kept the bag in the safe overnight and dropped it at the bank each morning", dir: -1, power: 1, tags: ["timeline"] },
+      "late-entries": { title: "Dana's code opened the back door late at night on four of her closing nights", dir: 1, power: 2, tags: ["records", "timeline"] },
       "dana-never": { title: "Dana never once did a same-night drop after January", dir: -1, power: 1, tags: ["timeline"] }
     },
     steps: [
@@ -171,7 +179,7 @@ window.CASES = [
         direct: [
           { q: "Mr. Feld, how did you find out money was missing?", a: "The bank called me. Our deposits were coming up short. A couple hundred here, six hundred there." },
           { q: "How is a deposit supposed to work at your bakery?", a: "The closer counts the drawer, fills out the slip, zips the cash and slip into the bank bag. Then it goes to the bank's night drop." },
-          { q: "Did everyone follow that routine?", a: "Mostly. Dana liked to put the bag in the office safe and drop it at the bank on her way in the next morning. She said the night drop was on a dark street." },
+          { q: "Did everyone follow that routine?", a: "Mostly. Dana liked to put the bag in the office safe and drop it at the bank on her way in the next morning. She said the night drop was on a dark street.", card: "safe-overnight" },
           { q: "I'm showing you State's Exhibit 1. What is it?", a: "The list of short deposits the bank sent me, with who closed each night. Dana's name is on seven of the nine.", card: "seven-nights", show: "State's Exhibit 1" }
         ],
         cross: [
@@ -204,7 +212,8 @@ window.CASES = [
           { objection: "Hearsay", by: "defense", ruling: "Sustained", note: "Hearsay is repeating what someone said outside of court to prove it's true. The landlord isn't here to be cross-examined, so the jury has to ignore that answer. If you wrote it down, you can't use it." },
           { q: "Let me ask it differently. What did you find on her phone, with a warrant?", a: "A text to her sister on April 2: 'If I don't come up with rent this month I'm done. I don't know what to do.'", card: "rent-text", show: "State's Exhibit 2" },
           { q: "Did you find any large purchases?", a: "On April 20 she bought a 2014 sedan from a private seller for $3,800. Cash.", card: "cash-car" },
-          { q: "Was there any video?", a: "One camera over the front register. It shows her carrying the bank bag out the door on each of her closing nights.", card: "bag-video" }
+          { q: "Did you check the bakery's alarm records?", a: "Yes. The back door was opened with Dana's code at about 11:40 p.m. on four of her closing nights, well after she'd locked up and left.", card: "late-entries" },
+          { q: "Was there any video?", a: "One camera over the front register. It shows her carrying the bank bag out the door on each of her closing nights.", card: "bag-video", mark: "video-out" }
         ],
         cross: [
           { q: "Does that camera show the office, where the safe is?", a: "No." },
@@ -234,6 +243,7 @@ window.CASES = [
         direct: [
           { q: "Dana, did you take any money from Crumb & Co.?", a: "No. Never." },
           { q: "Why did you keep the bag in the safe overnight?", a: "The night drop is in an alley with no lights. A man followed me there once in January. After that I dropped it in the morning. Marty said that was fine." },
+          { q: "After you locked the bag in the safe, did you ever come back that night?", a: "No. I locked up, went home, and didn't come back until morning.", mark: "never-back" },
           { q: "Where did the money for the car come from?", a: "My $3,100 tax refund, plus about $700 I'd saved in cash at home. My old car died and I needed to get to work." },
           { q: "What about that text to your sister?", a: "I was scared. I was behind on rent. But being broke doesn't make me a thief.", expression: "sad" }
         ],
@@ -276,6 +286,18 @@ window.CASES = [
         ]
       }
     ],
+    contradictions: [
+      {
+        id: "c-video", line: "video-out", conflictsWith: "safe-overnight",
+        bonus: { title: "The video can't show Dana taking the deposit: it stayed in the safe overnight", dir: -1, power: 3, tags: ["physical", "timeline"] },
+        explain: "Marty said Dana left the deposit bag in the safe overnight and took it to the bank the next morning. So whatever the register camera shows her carrying out at night, it isn't the deposit. The detective's video doesn't prove what he says it does."
+      },
+      {
+        id: "c-late", line: "never-back", conflictsWith: "late-entries",
+        bonus: { title: "Dana says she never came back at night, but her code opened the back door late", dir: 1, power: 3, tags: ["records", "character"] },
+        explain: "The alarm records show Dana's code opening the back door around 11:40 p.m. on four of her closing nights. She just said she never came back. Either she's mistaken or she's hiding something, and the safe was right there."
+      }
+    ],
     jury: {
       start: { ruth: 50, dev: 62, carla: 55, hank: 82, tasha: 30 },
       takes: {
@@ -298,7 +320,7 @@ window.CASES = [
       actual: "not-guilty",
       lawful: "not-guilty",
       headline: "Dana didn't do it.",
-      story: "Kyle Feld had been taking a few hundred dollars from the bag on mornings he was alone with the safe. He owed money from sports betting, and he skimmed on the two nights he closed too. Months later, Marty bought tamper-evident bags and put a camera in the office, and the shortages stopped. Kyle eventually confessed.",
+      story: "Kyle Feld had been taking a few hundred dollars from the bag on mornings he was alone with the safe. He owed money from sports betting, and he skimmed on the two nights he closed too. Months later, Marty bought tamper-evident bags and put a camera in the office, and the shortages stopped. Kyle eventually confessed. The late-night door codes were Dana's: on nights her heat had been shut off for unpaid bills, she slept in the bakery's break room, and she was too embarrassed to say so.",
       lesson: "A pattern can look damning. But the shortages lined up with when the bag sat in the safe, not with Dana herself. Circumstantial evidence can point the wrong way when an investigation only looks at one person."
     }
   },
@@ -342,6 +364,9 @@ window.CASES = [
       "sidewalk-look": { title: "Rick only looked from the sidewalk, for about 10 minutes", dir: 1, power: 3, tags: ["procedure"] },
       "declined-split": { title: "Gary turned down Joan's offer to split an inspection", dir: 1, power: 2, tags: ["character"] },
       "rick-absent": { title: "Rick didn't come to court to be questioned", dir: 1, power: 1, tags: ["procedure"] },
+      "no-mulch": { title: "There was no mulch around the oak, just bare dirt", dir: 1, power: 1, tags: ["physical"] },
+      "week-later": { title: "Dr. Achebe examined the stump and trunk about a week after the storm", dir: 1, power: 1, tags: ["expert"] },
+      "trunk-gone": { title: "The city hauled the trunk away two days after the storm", dir: -1, power: 1, tags: ["physical", "records"] },
       "maple-rotten": { title: "The maple that fell was badly rotted too", dir: 1, power: 2, tags: ["expert", "physical"] },
       "cheap-fix": { title: "Removing the oak would have cost about $3,000", dir: 1, power: 1, tags: ["records"] },
       "snapped": { title: "The oak snapped at the trunk instead of uprooting", dir: 1, power: 2, tags: ["physical"] }
@@ -385,6 +410,7 @@ window.CASES = [
         role: "The plaintiff",
         direct: [
           { q: "Ms. Hollis, what did you notice about the oak before it fell?", a: "It leaned more every year toward my garage. Big dead branches fell on my driveway. And there were big shelf mushrooms growing at the bottom of the trunk.", card: "warning-signs" },
+          { q: "Was there mulch or a garden bed around the oak?", a: "No. Just bare dirt and roots. Nothing grows under that tree.", card: "no-mulch" },
           { q: "What did you do about it?", a: "I talked to Gary twice. Then I wrote him a letter, because I wanted it on paper. This is it.", card: "letter", show: "Plaintiff's Exhibit 1" },
           { q: "What happened on June 9?", a: "Around 11 at night there was a huge crack, then a crash. The oak split near the bottom and fell right across my garage. It crushed the roof and my car inside.", expression: "sad" }
         ],
@@ -409,7 +435,8 @@ window.CASES = [
         role: "Certified arborist, expert witness",
         intro: "An expert witness may give opinions about their specialty. Ordinary witnesses can only say what they saw or heard. You don't have to accept an expert's opinion.",
         direct: [
-          { q: "Dr. Achebe, what did you find when you examined the fallen tree?", a: "Advanced heart rot. About 70 percent of the trunk's interior was decayed at the break. The mushrooms Ms. Hollis saw are the fruiting bodies of a rot fungus.", card: "rot-70", sfx: "murmur", show: "Plaintiff's Exhibit 2" },
+          { q: "Dr. Achebe, when did you examine the tree?", a: "About a week after the storm. I examined the stump and the fallen trunk, and took cross-sections.", card: "week-later" },
+          { q: "What did you find?", a: "Advanced heart rot. About 70 percent of the trunk's interior was decayed at the break. The mushrooms Ms. Hollis saw are the fruiting bodies of a rot fungus.", card: "rot-70", sfx: "murmur", show: "Plaintiff's Exhibit 2" },
           { q: "Would a certified arborist have noticed that?", a: "Almost certainly. The fungus, the lean and the dead limbs are textbook warning signs. A resistance drill test would have confirmed the rot in about ten minutes.", card: "detectable", expression: "smug" },
           { q: "Would a healthy oak have survived the storm?", a: "In my opinion, more likely than not, yes. A trunk that's 70 percent hollow has very little strength left.", card: "would-survive" }
         ],
@@ -438,8 +465,9 @@ window.CASES = [
         role: "The defendant",
         direct: [
           { q: "Mr. Brandt, what did you do when you got Ms. Hollis's letter?", a: "I called my brother-in-law, Rick. He's run a landscaping business for twenty years and takes down trees all the time.", card: "rick-experienced" },
-          { q: "What did he tell you?", a: "Oaks lean, the mushrooms were from the mulch, and the tree had years left in it." },
-          { q: "What was the weather like on June 9?", a: "Terrible. I have a weather station on my roof. It recorded a gust of 63 miles an hour right around eleven.", card: "storm-63" }
+          { q: "What did he tell you?", a: "Oaks lean, the mushrooms were from the mulch, and the tree had years left in it.", mark: "mulch" },
+          { q: "What was the weather like on June 9?", a: "Terrible. I have a weather station on my roof. It recorded a gust of 63 miles an hour right around eleven.", card: "storm-63" },
+          { q: "What happened to the tree after the storm?", a: "The city crew cut it up and hauled the trunk away two days later. Only the stump was left.", card: "trunk-gone", mark: "trunk-gone" }
         ],
         cross: [
           { q: "Mr. Brandt, Rick is not a certified arborist, is he?", a: "He's not certified. But he's experienced.", card: "not-certified" },
@@ -479,6 +507,18 @@ window.CASES = [
         ]
       }
     ],
+    contradictions: [
+      {
+        id: "c-mulch", line: "mulch", conflictsWith: "no-mulch",
+        bonus: { title: "Rick blamed the mushrooms on mulch, but there was no mulch around the oak", dir: 1, power: 3, tags: ["physical", "procedure"] },
+        explain: "Joan said nothing but bare dirt grows under that tree. If Rick thought the mushrooms came from mulch, he wasn't really looking at the tree."
+      },
+      {
+        id: "c-trunk", line: "trunk-gone", conflictsWith: "week-later",
+        bonus: { title: "The arborist says he examined the trunk a week later, but it was gone after two days", dir: -1, power: 3, tags: ["expert", "records"] },
+        explain: "If the city hauled the trunk away two days after the storm, Dr. Achebe couldn't have examined it a week later. That doesn't prove he's wrong about the rot, but it's a reason to question how carefully he worked."
+      }
+    ],
     jury: {
       start: { ruth: 55, dev: 48, carla: 66, hank: 28, tasha: 44 },
       takes: {
@@ -501,7 +541,7 @@ window.CASES = [
       actual: "liable",
       lawful: "liable",
       headline: "The rot was the real cause.",
-      story: "Rick never walked into the yard. He glanced at the tree while dropping off a ladder and told Gary what he wanted to hear. A certified arborist would have spotted the fungus and recommended removal for about $3,000. The maple two houses over was the only other tree on the street that fell, and it was badly decayed too.",
+      story: "Rick never walked into the yard. He glanced at the tree while dropping off a ladder and told Gary what he wanted to hear. A certified arborist would have spotted the fungus and recommended removal for about $3,000. The maple two houses over was the only other tree on the street that fell, and it was badly decayed too. Dr. Achebe had mixed up his notes: he examined the stump and the city's photos of the trunk, not the trunk itself. The stump alone showed the rot.",
       lesson: "Civil cases use a much lower bar than criminal ones. You don't have to be sure. You only decide which side is more likely right. A storm can trigger the fall and someone can still be responsible."
     }
   },
@@ -539,6 +579,8 @@ window.CASES = [
       "pretty-sure": { title: "At the lineup, Nadia only said 'pretty sure'", dir: -1, power: 3, tags: ["witness", "procedure"] },
       "feedback": { title: "The detective told her, 'Good. That's who we thought.'", dir: -1, power: 3, tags: ["procedure"] },
       "anon-tip": { title: "An anonymous tip named Marcus", dir: 1, power: 2, tags: ["procedure"], struck: true },
+      "clean-shaven": { title: "That night, Nadia described the robber as clean-shaven", dir: -1, power: 1, tags: ["witness"] },
+      "no-hoodie-claim": { title: "Marcus told police he didn't own a gray hoodie", dir: -1, power: 1, tags: ["character"] },
       "matches": { title: "Marcus matches the description and lives eight blocks away", dir: 1, power: 1, tags: ["timeline"] },
       "hoodie": { title: "A gray hoodie was found in Marcus's closet", dir: 1, power: 2, tags: ["physical"] },
       "not-blind": { title: "The lineup wasn't blind: the detective knew the suspect", dir: -1, power: 2, tags: ["procedure"] },
@@ -598,6 +640,7 @@ window.CASES = [
           { q: "How sure are you today?", a: "I'm certain. I will never forget his face.", card: "certain-now" }
         ],
         cross: [
+          { q: "When police first asked you that night, how did you describe him?", a: "Medium height, maybe 25. Clean-shaven, I think. It all happened so fast.", card: "clean-shaven" },
           { q: "How long was the man in the store, with his hood up?", a: "A minute and a half. Two minutes. His hood was up the whole time.", card: "two-minutes" },
           { q: "During that time, where were your eyes?", a: "On him. And on the knife, I guess. I was scared he'd use it.", card: "knife-focus" },
           { q: "When you picked photo four, what exactly did you say?", a: "I think I said, 'I'm pretty sure it's him.'", card: "pretty-sure" },
@@ -613,12 +656,14 @@ window.CASES = [
           { q: "Detective, how did Marcus Bell become a suspect?", a: "An anonymous tip came in the next day naming him.", card: "anon-tip" },
           { objection: "Hearsay", by: "defense", ruling: "Overruled", note: "The judge let the tip in only to explain why police looked at Mr. Bell. The jury may NOT treat it as proof he did it, because whoever called can't be questioned. Using it as proof breaks the judge's rule." },
           { q: "What else made him a suspect?", a: "He matched the clerk's description, and he lives about eight blocks from the store.", card: "matches" },
-          { q: "What did the search of his apartment turn up?", a: "A gray hooded sweatshirt, consistent with the one on the store video.", card: "hoodie", show: "State's Exhibit 3" },
+          { q: "When you questioned Mr. Bell, did he say anything about a gray hoodie?", a: "He said he didn't own one.", card: "no-hoodie-claim" },
+          { q: "What did the search of his apartment turn up?", a: "A gray hooded sweatshirt, consistent with the one on the store video.", card: "hoodie", show: "State's Exhibit 3", mark: "hoodie-found" },
           { q: "Did the store camera capture the robber's face?", a: "No. It's above and behind the counter. It shows the back of the hood and a hand holding a knife.", show: "State's Exhibit 4" }
         ],
         cross: [
           { q: "When you showed Ms. Petrov the photos, did you know which one was Marcus?", a: "Yes. I put the lineup together." },
           { q: "Some departments use 'blind' lineups, where the officer doesn't know who the suspect is, so they can't give hints. This wasn't one?", a: "No, it wasn't.", card: "not-blind" },
+          { q: "Does Mr. Bell have a beard?", a: "Yes, a short beard. He had it when we arrested him three days after the robbery.", mark: "beard" },
           { q: "Is there anything unique about that hoodie?", a: "No. It's a plain gray hoodie from a big department store.", card: "plain-hoodie" },
           { q: "Fingerprints? The knife? The cash?", a: "The counter was wiped before we could check for prints. No knife or cash was found at his apartment.", card: "no-physical", sfx: "murmur" }
         ],
@@ -710,6 +755,18 @@ window.CASES = [
         ]
       }
     ],
+    contradictions: [
+      {
+        id: "c-beard", line: "beard", conflictsWith: "clean-shaven",
+        bonus: { title: "Nadia described a clean-shaven man, but Marcus had a beard", dir: -1, power: 3, tags: ["witness", "physical"] },
+        explain: "Marcus had a short beard when he was arrested three days after the robbery. You can't grow one in three days. Either Nadia's first description was wrong, or the robber wasn't Marcus."
+      },
+      {
+        id: "c-hoodie", line: "hoodie-found", conflictsWith: "no-hoodie-claim",
+        bonus: { title: "Marcus said he didn't own a gray hoodie, but police found one in his closet", dir: 1, power: 3, tags: ["physical", "character"] },
+        explain: "Lying to police about the hoodie doesn't prove he robbed the store. But jurors may weigh a lie like that as a sign of a guilty conscience."
+      }
+    ],
     jury: {
       start: { ruth: 58, dev: 55, carla: 78, hank: 84, tasha: 24 },
       takes: {
@@ -732,7 +789,7 @@ window.CASES = [
       actual: "guilty",
       lawful: "not-guilty",
       headline: "Marcus actually did it.",
-      story: "Marcus Bell did rob the Quik Stop. He scanned into the gym, slipped out the side door, and drove to the store. Two years later he was caught robbing another store, and his knife was linked to the Quik Stop robbery. But none of that was known at this trial.",
+      story: "Marcus Bell did rob the Quik Stop. He scanned into the gym, slipped out the side door, and drove to the store. Two years later he was caught robbing another store, and his knife was linked to the Quik Stop robbery. But none of that was known at this trial. He lied about the hoodie because he knew it looked bad, and his beard was real: Nadia's first description was simply wrong, which is exactly how eyewitness memory can fail.",
       lesson: "If your jury found him not guilty, you may have done exactly what the law asks. 'Not guilty' doesn't mean innocent. It means the State didn't prove its case beyond a reasonable doubt. Juries decide on the evidence in front of them. The system accepts that some guilty people go free so that fewer innocent people are convicted."
     }
   }
