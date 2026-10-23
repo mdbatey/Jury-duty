@@ -9,7 +9,7 @@ All cases are fictional. Some borrow the general shape of common real-world case
 ## How to play
 
 1. Choose **Play solo** and **pick a case** from the docket. (To play with friends, see [Playing with friends](#playing-with-friends).)
-2. **Watch the trial.** Tap **Next** (or press the space bar) to move it along. Witnesses walk to the stand, lawyers question them, and objections pop up with a plain explanation of what the judge decided. Each line types out; tap **Next** once to finish it and again to move on. Use **Text speed** at the top to pick Slow, Normal or Instant.
+2. **Watch the trial.** Tap **Next** (or press the space bar) to move it along. Witnesses walk to the stand, lawyers question them, and objections pop up with a plain explanation of what the judge decided. Each line types out; tap **Next** once to finish it and again to move on. Use **Text speed** at the top to pick Slow, Normal or Instant. Turn on **Sound** for a gavel, objection stings and the gallery's murmurs. It's off by default, and only the courtroom screen plays sound, never phones.
 3. **Take notes.** When a witness says something important, tap **Write it down**. Your notebook holds 7 facts. Be careful: if the judge throws out an answer and you use it later, the other jurors will trust you less.
 4. **Ask one question.** Some witnesses give you the chance to send the judge a written question. The answer can help either side.
 5. **Deliberate.** In the jury room, play a fact from your notebook and choose who to say it to. Each juror is moved by different kinds of evidence:
@@ -55,6 +55,7 @@ python3 -m http.server 8000
 | `style.css` | The look of the game, including light and dark mode |
 | `cases.js` | The jurors and all trial content. Edit this to add or change cases. |
 | `portraits.js` | Code-drawn character faces and their expressions |
+| `sound.js` | Courtroom sound effects, generated in code |
 | `engine.js` | The game's rules: seats, the trial script, notebooks, deliberation, ballots and report cards. No screen code. |
 | `net.js` | The connection between the courtroom screen and phones |
 | `game.js` | Every screen: home, solo play, the courtroom screen and the juror's phone |
@@ -72,5 +73,5 @@ Open `cases.js`, copy one of the cases in `window.CASES`, and change it. The com
 - **Witness transcripts**: lists of `{ q, a }` question-and-answer pairs. Add `card: "id"` to let the player write that answer down, or `show: "Exhibit label"` to display an exhibit. Objections look like `{ objection, by, ruling, note }`.
 - **`cards`**: the facts a player can collect. `dir: 1` points toward guilty or liable, `dir: -1` the other way. `power` runs from 1 to 3. `tags` say what kind of evidence it is. Set `struck: true` for anything the judge throws out.
 - **`jury`**: each juror's starting opinion (0 to 100), their first comments, and the arguments they raise during deliberation.
-- **`looks`**: each character's portrait, keyed by their name as it appears in the case: `skin` (0 to 5, light to deep), `hair`, `hairColor`, optional `facial`, `glasses` and `older`, and `clothes`. Anyone without a look gets one generated from their name. A transcript line can set `expression` (`calm`, `nervous`, `angry`, `sad`, `smug` or `surprised`) for the witness's face; otherwise witnesses look nervous on cross-examination and calm on direct.
+- **`looks`**: each character's portrait, keyed by their name as it appears in the case: `skin` (0 to 5, light to deep), `hair`, `hairColor`, optional `facial`, `glasses` and `older`, and `clothes`. Anyone without a look gets one generated from their name. A transcript line can set `sfx: "murmur"` to make the gallery murmur after it. A transcript line can set `expression` (`calm`, `nervous`, `angry`, `sad`, `smug` or `surprised`) for the witness's face; otherwise witnesses look nervous on cross-examination and calm on direct.
 - **`truth`**: `lawful` is the verdict the evidence supports, `actual` is what really happened, plus the story and the lesson shown at the end.

@@ -3,6 +3,7 @@
 
   var E = window.JuryEngine;
   var P = window.JuryPortraits;
+  var S = window.JurySound;
   var Net = window.JuryNet;
   var CASES = window.CASES || [];
   var JURORS = window.JURORS || [];
@@ -265,12 +266,13 @@
   function beginLine(g) {
     var b = g.beats[g.beat];
     var key = g.beat + "|" + b.text;
-    if (typing.key === key) return;
+    if (typing.key === key) return false;
     clearTimeout(typing.timer);
     var fresh = g.beat > maxSeen;
     maxSeen = Math.max(maxSeen, g.beat);
     typing = { key: key, text: b.text, shown: 0, done: !(fresh && charsPerSecond() > 0 && b.text.length), timer: null };
     if (!typing.done) typing.timer = setTimeout(typeNext, 0);
+    return fresh;
   }
 
   function typeNext() {
@@ -303,6 +305,12 @@
     return true;
   }
 
+  function soundButton() {
+    if (!S.supported()) return "";
+    var on = S.isOn();
+    return '<button class="btn-link speed-btn" data-action="sound" aria-pressed="' + on + '">Sound: ' + (on ? "On" : "Off") + "</button>";
+  }
+
   function speedButton() {
     return '<button class="btn-link speed-btn" data-action="speed" aria-label="Text speed: ' + SPEED_NAMES[textSpeed()] + '. Tap to change.">Text speed: ' + SPEED_NAMES[textSpeed()] + "</button>";
   }
@@ -310,7 +318,8 @@
   // Draw the trial's dialogue box and move the board to the current line.
   function showDialog() {
     var g = ui.g;
-    beginLine(g);
+    // A line's sound plays the first time it appears, not after Back.
+    if (beginLine(g) && g.beats[g.beat].sfx) S.play(g.beats[g.beat].sfx);
     document.getElementById("dialog").innerHTML = ui.screen === "solo" ? soloTrialDialog() : hostTrialDialog();
     updateBoard(g);
   }
@@ -432,7 +441,7 @@
         '<button class="btn" data-action="speak"' + (ui.sel && ui.target ? "" : " disabled") + ">Make your point</button></div>";
     }
     return '<div class="trial">' +
-      '<div class="trial-top"><button class="btn-link" data-action="home">← Leave court</button><span class="docket">Jury room · Turn ' + Math.min(d.round, E.ROUNDS) + " of " + E.ROUNDS + "</span></div>" +
+      '<div class="trial-top"><button class="btn-link" data-action="home">← Leave court</button>' + soundButton() + '<span class="docket">Jury room · Turn ' + Math.min(d.round, E.ROUNDS) + " of " + E.ROUNDS + "</span></div>" +
       '<div class="trial-grid"><div class="room">' + tableSvg(g, !!ui.sel && !d.voting) +
       '<ol class="log" id="log">' + logHtml(g, d.log, 0) + "</ol></div>" +
       '<div class="dialog"><p class="phase">Your notebook<span class="muted small">' + hand.count + (hand.count === 1 ? " fact" : " facts") + " left</span></p>" + controls + "</div></div></div>";
@@ -465,7 +474,8 @@
     })).map(function (b, i) {
       return '<li class="vote-card" style="animation-delay:' + (i * 0.3) + 's"><b>' + esc(b.name) + "</b>" + vw(b.v) + "</li>";
     }).join("");
-    return '<header class="page-head verdict"><p class="eyebrow">' + esc(c.caption) + " · The foreperson reads the verdict</p><h1>" + verdictTitle(c, d.verdict) + "</h1>" +
+    return '<div class="trial-top"><button class="btn-link" data-action="home">← Leave court</button>' + soundButton() + "</div>" +
+      '<header class="page-head verdict"><p class="eyebrow">' + esc(c.caption) + " · The foreperson reads the verdict</p><h1>" + verdictTitle(c, d.verdict) + "</h1>" +
       (d.verdict === "mistrial" ? "<p>The jury couldn't reach the required agreement, so the judge declares a mistrial.</p>" : "") + "</header>" +
       '<section class="panel"><p class="muted small">The ballots</p><ol class="votes">' + ballots + "</ol></section>" +
       truthHtml(c) +
@@ -477,7 +487,7 @@
     var g = ui.g;
     var c = E.findCase(g.caseId);
     if (g.phase === "trial") {
-      return renderCourtroom(c, '<div class="trial-top"><button class="btn-link" data-action="home">← Leave court</button>' + speedButton() + '<span class="docket">' + esc(c.caption) + " · No. " + esc(c.docket) + "</span></div>");
+      return renderCourtroom(c, '<div class="trial-top"><button class="btn-link" data-action="home">← Leave court</button>' + speedButton() + soundButton() + '<span class="docket">' + esc(c.caption) + " · No. " + esc(c.docket) + "</span></div>");
     }
     if (g.phase === "deliberation") return renderSoloDeliberation();
     return renderSoloVerdict();
@@ -501,7 +511,7 @@
     var g = ui.g;
     var fore = g.humans[g.foreperson];
     var live = g.humans.filter(function (p) { return p.connected; }).length;
-    return '<div class="trial-top"><button class="btn-link" data-action="end-game">End game</button>' + (g.phase === "trial" ? speedButton() : "") +
+    return '<div class="trial-top"><button class="btn-link" data-action="end-game">End game</button>' + (g.phase === "trial" ? speedButton() : "") + soundButton() +
       '<span class="docket">' + esc(c.caption) + " · Code <b class=\"code-inline\">" + esc(ui.code || "----") + "</b> · " +
       live + " of " + g.humans.length + " jurors connected" + (fore ? " · Foreperson: " + esc(fore.name) : "") + "</span></div>";
   }
@@ -957,6 +967,11 @@
     lastHtml = html;
     app.innerHTML = html;
     if ((ui.screen === "solo" || ui.screen === "host") && ui.g && ui.g.phase === "trial") showDialog();
+    if ((ui.screen === "solo" || ui.screen === "host") && ui.g && ui.g.phase === "verdict" && ui.verdictSounded !== ui.g) {
+      ui.verdictSounded = ui.g;
+      S.play("gavel");
+      setTimeout(function () { S.play("verdict"); }, 450);
+    }
     scrollLog();
   }
 
@@ -1045,6 +1060,13 @@
       // Hosting
       case "host-case": startHost(b.dataset.id); break;
       case "host-advance": if (!finishIfTyping()) hostAct({ type: "advance" }); break;
+      case "sound":
+        var turnOn = !S.isOn();
+        S.setOn(turnOn);
+        if (turnOn) S.play("gavel");
+        b.textContent = "Sound: " + (turnOn ? "On" : "Off");
+        b.setAttribute("aria-pressed", String(turnOn));
+        break;
       case "speed":
         var nextSpeed = SPEED_ORDER[(SPEED_ORDER.indexOf(textSpeed()) + 1) % SPEED_ORDER.length];
         try { localStorage.setItem(SPEED_KEY, nextSpeed); } catch (err) {}
