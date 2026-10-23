@@ -30,6 +30,14 @@ _Avoid_: Host, leader, admin
 A juror controlled by the game, with a fixed personality, who fills any seat no person has taken.
 _Avoid_: AI juror, bot, NPC
 
+**Juror pool**:
+All the computer jurors the game can choose from. Each game picks five of them.
+_Avoid_: Roster, cast, deck
+
+**Replay code**:
+A four-character code shown on the report card. Entering it with the same case brings back the same people, so friends can play exactly the same jury and compare.
+_Avoid_: Seed (in anything players see), game code (that identifies a live multiplayer game)
+
 **Fact**:
 A piece of evidence from the trial that a juror can write in their notebook and argue with in the jury room.
 _Avoid_: Card, note, clue
