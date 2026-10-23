@@ -177,6 +177,7 @@ window.CASES = [
     blurb: "Over three weeks, $4,200 vanished from a small bakery's bank deposits. The assistant manager closed on most of those nights.",
     length: "About 20 minutes",
     looks: {
+      "Bailiff Gus Ferreira": { skin: 3, hair: "buzz", hairColor: "gray", older: true, facial: "mustache", clothes: "#2f4f4f" },
       "Court clerk": {skin: 2, hair: "short", hairColor: "brown", glasses: true, clothes: "#4a5568"},
       "Judge Harriet Vance": {skin: 5, hair: "short", hairColor: "gray", older: true, glasses: true, clothes: "#22262e"},
       "Prosecutor Renee Okafor": {skin: 4, hair: "bun", hairColor: "black", clothes: "#2e5a88"},
@@ -405,6 +406,7 @@ window.CASES = [
     blurb: "A storm brought a huge oak down onto a neighbor's garage. Was it bad luck, or did the owner ignore the warning signs?",
     length: "About 15 minutes",
     looks: {
+      "Bailiff Gus Ferreira": { skin: 3, hair: "buzz", hairColor: "gray", older: true, facial: "mustache", clothes: "#2f4f4f" },
       "Court clerk": {skin: 4, hair: "ponytail", hairColor: "black", clothes: "#4a5568"},
       "Judge Elena Moreau": {skin: 2, hair: "long", hairColor: "chestnut", glasses: true, clothes: "#22262e"},
       "Attorney Priya Natarajan": {skin: 3, hair: "long", hairColor: "black", clothes: "#8a3b3b"},
@@ -626,6 +628,7 @@ window.CASES = [
     blurb: "A clerk picked a man out of a photo lineup after a fast, frightening robbery. Is that enough to convict him?",
     length: "About 20 minutes",
     looks: {
+      "Bailiff Gus Ferreira": { skin: 3, hair: "buzz", hairColor: "gray", older: true, facial: "mustache", clothes: "#2f4f4f" },
       "Court clerk": {skin: 1, hair: "bun", hairColor: "chestnut", clothes: "#4a5568"},
       "Judge Raymond Ostrowski": {skin: 0, hair: "side", hairColor: "white", older: true, clothes: "#22262e"},
       "Prosecutor Allen Cho": {skin: 1, hair: "side", hairColor: "black", glasses: true, clothes: "#4a5568"},

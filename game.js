@@ -30,7 +30,7 @@
 
   // Top-down courtroom. Coordinates are in the board's 360 x 430 viewBox.
   var SPOTS = {
-    judge: [180, 38], clerk: [95, 82], stand: [275, 86], podium: [180, 196],
+    judge: [180, 38], clerk: [95, 82], bailiff: [34, 96], stand: [275, 86], podium: [180, 196],
     p1: [118, 292], p2: [156, 292], d1: [224, 292], d2: [262, 292],
     g0: [44, 352], g1: [84, 352], g2: [124, 352], g3: [236, 352], g4: [276, 352], g5: [316, 352],
     j0: [30, 144], j1: [64, 144], j2: [30, 182], j3: [64, 182], j4: [30, 220], j5: [64, 220]
@@ -97,7 +97,8 @@
       var mine = l.who === "h" + mineH;
       // Human jurors' moves look different from computer jurors' lines.
       var human = /^h\d+$/.test(l.who);
-      return '<li class="msg' + (human ? " human" : "") + (mine ? " mine" : "") + (l.cls ? " " + l.cls : "") + '"><b>' + esc(whoName(g, l.who)) +
+      var to = !l.to ? "" : l.to === "all" ? " → Everyone" : " → " + whoName(g, l.to);
+      return '<li class="msg' + (human ? " human" : "") + (mine ? " mine" : "") + (l.cls ? " " + l.cls : "") + '"><b>' + esc(whoName(g, l.who) + to) +
         (l.meta ? ' <span class="meta">' + esc(l.meta) + "</span>" : "") + "</b><span>" + esc(l.text) + "</span></li>";
     }).join("");
   }
@@ -300,6 +301,109 @@
     if (el) el.textContent = typing.text;
     var after = document.getElementById("after-line");
     if (after) after.hidden = false;
+    scheduleAuto();
+  }
+
+  // ---------- Auto-advance and timed facts ----------
+
+  // The trial moves on by itself: each line stays up for its typing time plus
+  // a reading pause. Next skips ahead, Back and Pause stop the clock, and
+  // juror-question moments wait. ?noauto turns it off for automated tests.
+  var auto = { timer: null, key: null, paused: false };
+  var expiryTimer = null;
+
+  function stopAuto() {
+    clearTimeout(auto.timer);
+    auto.timer = null;
+    auto.key = null;
+  }
+
+  function dwellFor(b) {
+    return Math.min(12000, 2000 + b.text.length * 45);
+  }
+
+  function someoneCanAsk(g) {
+    return g.humans.some(function (p) { return p.connected && !p.askUsed; });
+  }
+
+  function scheduleAuto() {
+    var g = ui.g;
+    if (!g || g.phase !== "trial" || (ui.screen !== "solo" && ui.screen !== "host")) return stopAuto();
+    if (auto.paused || new URLSearchParams(location.search).has("noauto") || !typing.done) return stopAuto();
+    var b = g.beats[g.beat];
+    if (b.kind === "ask" && b.askedBy === undefined && someoneCanAsk(g)) return stopAuto();
+    if (ui.screen === "solo" && ui.offOpen === g.beat) return stopAuto();
+    if (auto.timer && auto.key === b.id) return;
+    stopAuto();
+    auto.key = b.id;
+    auto.timer = setTimeout(function () {
+      auto.timer = null;
+      auto.key = null;
+      if (ui.screen === "solo") soloAct({ type: "advance" });
+      else if (ui.screen === "host") hostAct({ type: "advance" });
+    }, dwellFor(b));
+  }
+
+  function setPaused(on) {
+    auto.paused = on;
+    if (on) stopAuto(); else scheduleAuto();
+    var btn = app.querySelector('[data-action="pause"]');
+    if (btn) btn.textContent = on ? "Resume" : "Pause";
+  }
+
+  function pauseButton() {
+    return '<button class="btn-link speed-btn" data-action="pause">' + (auto.paused ? "Resume" : "Pause") + "</button>";
+  }
+
+  // Redraw when the next fact runs out of time, so it leaves the list.
+  function scheduleExpiry() {
+    clearTimeout(expiryTimer);
+    var g = ui.g;
+    if (!g || g.phase !== "trial") return;
+    var times = E.factTimes(g);
+    if (!times.length) return;
+    var soonest = Math.min.apply(null, times.map(function (f) { return f.ms; }));
+    expiryTimer = setTimeout(function () {
+      if (!ui.g || ui.g.phase !== "trial") return;
+      if (ui.screen === "solo") showDialog();
+      else if (ui.screen === "host") hostChanged();
+    }, soonest + 30);
+  }
+
+  // Countdown bars get their timing after drawing, so the page's markup (and a
+  // phone's decision to redraw) doesn't change every time the clock ticks.
+  // Phones turn the courtroom screen's "ms left" into their own deadlines.
+  var deadlines = {};
+  function trackDeadlines(times) {
+    var next = {};
+    (times || []).forEach(function (f) { next[f.fact] = deadlines[f.fact] || Date.now() + f.ms; });
+    deadlines = next;
+  }
+
+  function paintTimers() {
+    var local = ui.screen !== "phone" && ui.g && ui.g.phase === "trial" ? E.factTimes(ui.g) : null;
+    Array.prototype.forEach.call(app.querySelectorAll(".fact-timer"), function (el) {
+      if (el.getAttribute("data-painted")) return;
+      var id = el.getAttribute("data-fact");
+      var ms = local ? (local.filter(function (f) { return f.fact === id; })[0] || { ms: 0 }).ms : (deadlines[id] || 0) - Date.now();
+      ms = Math.max(0, ms);
+      el.style.setProperty("--from", (Math.min(1, ms / E.FACT_MS) * 100).toFixed(1) + "%");
+      el.style.animationDuration = Math.round(ms) + "ms";
+      el.setAttribute("aria-label", Math.ceil(ms / 1000) + " seconds left");
+      el.setAttribute("data-painted", "1");
+    });
+  }
+
+  // Facts that can still be written down, each with a bar that drains as its time runs out.
+  function factListHtml(c, times, notebook, action) {
+    var items = times.filter(function (f) { return notebook.indexOf(f.fact) < 0; });
+    if (!items.length) return "";
+    var full = notebook.length >= E.NOTE_LIMIT;
+    return '<div class="fact-timers"><p class="eyebrow">Write it down before time runs out</p><ul class="fact-list">' + items.map(function (f) {
+      return '<li><span>' + esc(c.cards[f.fact].title) +
+        '<span class="fact-timer" data-fact="' + f.fact + '"></span></span>' +
+        (full ? "" : '<button class="btn note-btn" data-action="' + action + '" data-card="' + f.fact + '">Write it down</button>') + "</li>";
+    }).join("") + "</ul>" + (full ? '<p class="muted small">Your notebook is full. Remove a fact to make room.</p>' : "") + "</div>";
   }
 
   // Next while a line is typing finishes it instead of moving on.
@@ -328,6 +432,9 @@
     document.getElementById("dialog").innerHTML = ui.screen === "solo" ? soloTrialDialog() : hostTrialDialog();
     updateBoard(g);
     if (fresh) showReactions(g.beats[g.beat]);
+    paintTimers();
+    scheduleAuto();
+    scheduleExpiry();
   }
 
   // A reacting computer juror's face changes and a short word appears above
@@ -396,16 +503,7 @@
     var b = g.beats[g.beat];
     var me = g.humans[0];
     var extra = "";
-    if (b.card) {
-      var have = me.notebook.indexOf(b.card) >= 0;
-      var full = me.notebook.length >= E.NOTE_LIMIT;
-      extra += '<div class="note-row">' + (have
-        ? '<span class="noted">Written in your notebook</span>'
-        : full
-          ? '<span class="muted small">Your notebook is full. Remove a fact to make room.</span>'
-          : '<button class="btn note-btn" data-action="note" data-card="' + b.card + '">Write it down</button>') +
-        '<span class="card-title">' + esc(c.cards[b.card].title) + "</span></div>";
-    }
+    if (b.card && me.notebook.indexOf(b.card) >= 0) extra += '<div class="note-row"><span class="noted">Written in your notebook</span><span class="card-title">' + esc(c.cards[b.card].title) + "</span></div>";
     if (b.kind === "ask") {
       if (me.askUsed) extra += '<p class="muted small">You have already used your one question.</p>';
       else extra += askButtons(c, b) + '<p class="muted small">Or tap Next to skip your question.</p>';
@@ -414,6 +512,7 @@
     else if (E.flagLines(g).indexOf(g.beat) >= 0 && me.tries > 0) extra += offHtml(c, me, "");
     var last = g.beat === g.beats.length - 1;
     return phaseHtml(b, g.beat, g.beats.length) + speechHtml(c, b, extra) +
+      factListHtml(c, E.factTimes(g), me.notebook, "note") +
       '<div class="dialog-nav">' +
       '<button class="btn ghost" data-action="back"' + (g.beat === 0 ? " disabled" : "") + ">Back</button>" +
       '<button class="btn ghost" data-action="notebook">Notebook ' + me.notebook.length + "/" + E.NOTE_LIMIT + "</button>" +
@@ -600,7 +699,7 @@
     var g = ui.g;
     var c = E.findCase(g.caseId);
     if (g.phase === "trial") {
-      return renderCourtroom(c, '<div class="trial-top"><button class="btn-link" data-action="home">← Leave court</button>' + speedButton() + soundButton() + '<span class="docket">' + esc(c.caption) + " · No. " + esc(c.docket) + "</span></div>");
+      return renderCourtroom(c, '<div class="trial-top"><button class="btn-link" data-action="home">← Leave court</button>' + pauseButton() + speedButton() + soundButton() + '<span class="docket">' + esc(c.caption) + " · No. " + esc(c.docket) + "</span></div>");
     }
     if (g.phase === "deliberation") return renderSoloDeliberation();
     return renderSoloVerdict();
@@ -624,7 +723,7 @@
     var g = ui.g;
     var fore = g.humans[g.foreperson];
     var live = g.humans.filter(function (p) { return p.connected; }).length;
-    return '<div class="trial-top"><button class="btn-link" data-action="end-game">End game</button>' + (g.phase === "trial" ? speedButton() : "") + soundButton() +
+    return '<div class="trial-top"><button class="btn-link" data-action="end-game">End game</button>' + (g.phase === "trial" ? pauseButton() + speedButton() : "") + soundButton() +
       '<span class="docket">' + esc(c.caption) + " · Code <b class=\"code-inline\">" + esc(ui.code || "----") + "</b> · " +
       live + " of " + g.humans.length + " jurors connected" + (fore ? " · Foreperson: " + esc(fore.name) : "") + "</span></div>";
   }
@@ -665,7 +764,7 @@
     return phaseHtml(b, g.beat, g.beats.length) + speechHtml(c, b, extra) +
       '<div class="dialog-nav"><button class="btn ghost" data-action="host-back"' + (g.beat === 0 ? " disabled" : "") + ">Back</button>" +
       '<button class="btn" data-action="host-advance">' + (last ? "Go to the jury room" : "Next") + "</button></div>" +
-      '<p class="muted small">The foreperson moves the trial along from their phone. The space bar works here too.</p>';
+      '<p class="muted small">The trial moves on by itself. Next skips ahead, and the foreperson can pause from their phone. The space bar works here too.</p>';
   }
 
   function renderHostDeliberation(c) {
@@ -719,6 +818,7 @@
   function startHost(caseId) {
     stopHost();
     resetTyping();
+    stopAuto(); auto.paused = false;
     ui.g = E.createGame(caseId, "multi");
     ui.code = null;
     ui.hostError = null;
@@ -770,6 +870,11 @@
       return;
     }
     if (m.type !== "action" || entry.h < 0) return;
+    if (m.action && m.action.type === "pause") {
+      if (entry.h === g.foreperson) { setPaused(!!m.action.on); hostChanged(); }
+      return;
+    }
+    if (m.action && m.action.type === "back" && entry.h === g.foreperson) setPaused(true);
     if (m.action && m.action.type === "advance" && entry.h === g.foreperson && finishIfTyping()) return;
     if (E.apply(g, entry.h, m.action)) hostChanged();
   }
@@ -784,7 +889,7 @@
   function hostChanged() {
     var g = ui.g;
     if (!g || ui.screen !== "host") return;
-    ui.conns.forEach(function (e) { if (e.h >= 0) e.conn.send({ type: "view", view: E.viewFor(g, e.h) }); });
+    ui.conns.forEach(function (e) { if (e.h >= 0) e.conn.send({ type: "view", view: E.viewFor(g, e.h), paused: auto.paused }); });
     var sig = hostSignature();
     if (sig !== ui.sig || g.phase !== "trial") {
       ui.sig = sig;
@@ -875,7 +980,7 @@
       keepAwake();
       render();
     }
-    else if (m.type === "view") { ui.view = m.view; ui.phoneStatus = "joined"; renderPhoneKeepScroll(); }
+    else if (m.type === "view") { ui.view = m.view; ui.hostPaused = !!m.paused; trackDeadlines(m.view.me.factTimes); ui.phoneStatus = "joined"; renderPhoneKeepScroll(); }
     else if (m.type === "reject") { phoneStop(); ui.view = null; ui.phoneError = m.reason; go("join"); }
     else if (m.type === "ended") phoneEnded("The host ended the game.");
   }
@@ -971,15 +1076,11 @@
       '<p class="line">' + esc(b.text) + "</p></div>";
     var controls = fore
       ? '<div class="dialog-nav"><button class="btn ghost" data-action="m-back"' + (v.beatIndex === 0 ? " disabled" : "") + ">Back</button>" +
+        '<button class="btn ghost" data-action="m-pause">' + (ui.hostPaused ? "Resume" : "Pause") + "</button>" +
         '<button class="btn" data-action="m-advance">' + (v.beatIndex === v.beatsLen - 1 ? "Go to the jury room" : "Next") + "</button></div>"
       : "";
-    var full = me.notebook.length >= E.NOTE_LIMIT;
-    var avail = me.available.filter(function (id) { return me.notebook.indexOf(id) < 0; });
-    var facts = avail.length
-      ? '<section class="panel"><p class="eyebrow">From this testimony</p><ul class="fact-list">' + avail.map(function (id) {
-        return "<li><span>" + esc(c.cards[id].title) + "</span>" + (full ? "" : '<button class="btn note-btn" data-action="m-write" data-card="' + id + '">Write it down</button>') + "</li>";
-      }).join("") + "</ul>" + (full ? '<p class="muted small">Your notebook is full. Remove a fact to make room.</p>' : "") + "</section>"
-      : "";
+    var list = factListHtml(c, me.factTimes || [], me.notebook, "m-write");
+    var facts = list ? '<section class="panel">' + list + "</section>" : "";
     var ask = "";
     if (b.kind === "ask" && b.askedBy === undefined && !me.askUsed) {
       var s = c.steps[b.step];
@@ -1085,6 +1186,7 @@
     }
     lastHtml = html;
     app.innerHTML = html;
+    paintTimers();
     if ((ui.screen === "solo" || ui.screen === "host") && ui.g && ui.g.phase === "trial") showDialog();
     if ((ui.screen === "solo" || ui.screen === "host") && ui.g && ui.g.phase === "verdict" && ui.verdictSounded !== ui.g) {
       ui.verdictSounded = ui.g;
@@ -1095,6 +1197,7 @@
   }
 
   function go(screen) {
+    if (screen !== "solo" && screen !== "host") { stopAuto(); clearTimeout(expiryTimer); }
     ui.screen = screen;
     render();
     window.scrollTo(0, 0);
@@ -1144,13 +1247,15 @@
       // Solo
       case "start-case":
         resetTyping();
+        stopAuto(); auto.paused = false;
         ui.offOpen = false; ui.flagMsg = null;
         ui.g = E.createGame(b.dataset.id, "solo");
         ui.showNotebook = false; ui.sel = null; ui.target = null;
         go("solo");
         break;
       case "advance": if (!finishIfTyping()) soloAct({ type: "advance" }); var next = document.getElementById("next-btn"); if (next) next.focus(); break;
-      case "back": soloAct({ type: "back" }); break;
+      case "back": setPaused(true); soloAct({ type: "back" }); break;
+      case "pause": setPaused(!auto.paused); if (ui.screen === "host") hostChanged(); break;
       case "note": soloAct({ type: "write", fact: b.dataset.card }); break;
       case "unnote":
         if (ui.screen === "phone") phoneSend({ type: "unwrite", fact: b.dataset.card });
@@ -1195,7 +1300,7 @@
         b.textContent = "Text speed: " + SPEED_NAMES[nextSpeed];
         b.setAttribute("aria-label", "Text speed: " + SPEED_NAMES[nextSpeed] + ". Tap to change.");
         break;
-      case "host-back": hostAct({ type: "back" }); break;
+      case "host-back": setPaused(true); hostAct({ type: "back" }); break;
       case "end-game":
         stopHost();
         ui.g = null;
@@ -1206,8 +1311,9 @@
       case "m-start": phoneSend({ type: "start" }); break;
       case "m-advance": phoneSend({ type: "advance" }); break;
       case "m-back": phoneSend({ type: "back" }); break;
+      case "m-pause": phoneSend({ type: "pause", on: !ui.hostPaused }); break;
       case "m-write": phoneSend({ type: "write", fact: b.dataset.card }); break;
-      case "off-open": ui.offOpen = ui.g.beat; showDialog(); break;
+      case "off-open": ui.offOpen = ui.g.beat; stopAuto(); showDialog(); break;
       case "m-off-open": ui.offOpen = true; renderPhoneKeepScroll(); break;
       case "off-cancel": case "m-off-cancel": ui.offOpen = false; if (ui.screen === "phone") renderPhoneKeepScroll(); else showDialog(); break;
       case "off-pick":
