@@ -30,6 +30,10 @@ _Avoid_: Host, leader, admin
 A juror controlled by the game, with a fixed personality, who fills any seat no person has taken.
 _Avoid_: AI juror, bot, NPC
 
+**Outlook**:
+The attitude a computer juror brings to every criminal or every civil case, such as trusting the police. It sets where their mood starts.
+_Avoid_: Lean (that is a mood), bias, prejudice
+
 **Juror pool**:
 All the computer jurors the game can choose from. Each game picks five of them.
 _Avoid_: Roster, cast, deck
