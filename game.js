@@ -123,7 +123,8 @@
       '<section class="how"><div><p class="eyebrow">Step 1</p><h3>Watch the trial</h3><p class="muted">Witnesses take the stand, lawyers question them, and objections fly.</p></div>' +
       '<div><p class="eyebrow">Step 2</p><h3>Take notes</h3><p class="muted">Your notebook holds ' + E.NOTE_LIMIT + ' facts. Choose carefully, and watch out for evidence the judge throws out.</p></div>' +
       '<div><p class="eyebrow">Step 3</p><h3>Deliberate</h3><p class="muted">Use your facts to persuade the other jurors. Each one cares about different kinds of evidence.</p></div></section>' +
-      '<section class="panel"><div class="row-head"><h2>The computer jurors</h2><button class="btn-link" data-action="guide">Courtroom basics</button></div><ul class="jurors">' + cast + "</ul></section>";
+      '<section class="panel"><div class="row-head"><h2>The juror pool</h2><button class="btn-link" data-action="guide">Courtroom basics</button></div>' +
+      '<p class="muted">Each case seats five of these computer jurors.</p><ul class="jurors">' + cast + "</ul></section>";
   }
 
   function renderPick() {
@@ -142,7 +143,12 @@
     return '<button class="btn-link back" data-action="home">← Back</button>' +
       '<header class="page-head"><p class="eyebrow">' + (host ? "Host a game" : "Play solo") + "</p><h1>Today's docket</h1>" +
       (host ? '<p class="muted">Pick a case. This device becomes the courtroom screen, and you\'ll get a game code for everyone\'s phones. If you\'re playing too, join from your own phone.</p>' : "") +
-      '</header><div class="cases">' + cases + "</div>";
+      "</header>" +
+      '<section class="panel replay-form"><label for="replay-code">Have a replay code? <span class="muted">(optional)</span></label>' +
+      '<input id="replay-code" class="code-input" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false" value="' + esc(ui.replayText || "") + '" placeholder="K7QM">' +
+      '<p class="muted small">Enter one from a report card, then pick its case, to sit with exactly the same jury. Leave it blank for a new jury.</p>' +
+      (ui.replayError ? '<p class="error-text" role="alert">' + esc(ui.replayError) + "</p>" : "") +
+      '</section><div class="cases">' + cases + "</div>";
   }
 
   function renderGuide() {
@@ -670,6 +676,10 @@
     return v === "mistrial" ? "Hung jury" : v === w.yesId ? w.yes : w.no;
   }
 
+  function replayHtml(code) {
+    return '<p class="replay-code">Replay code <b class="code-inline">' + esc(code) + '</b> <span class="muted small">Enter it with this case to sit with the same jury again.</span></p>';
+  }
+
   function reportHtml(rows) {
     return '<ul class="report">' + rows.map(function (r) {
       return '<li class="' + (r.ok ? "ok" : "miss") + '"><b>' + esc(r.title) + "</b><span>" + esc(r.text) + "</span></li>";
@@ -692,8 +702,8 @@
       (d.verdict === "mistrial" ? "<p>The jury couldn't reach the required agreement, so the judge declares a mistrial.</p>" : "") + "</header>" +
       '<section class="panel"><p class="muted small">The ballots</p><ol class="votes">' + ballots + "</ol></section>" +
       truthHtml(c) +
-      '<section class="panel"><h2>Your jury service</h2>' + reportHtml(E.report(g, 0)) + "</section>" +
-      '<nav class="nav"><button class="btn ghost" data-action="start-case" data-id="' + c.id + '">Retry this case</button><button class="btn" data-action="home">Back to home</button></nav>';
+      '<section class="panel"><h2>Your jury service</h2>' + reportHtml(E.report(g, 0)) + replayHtml(g.code) + "</section>" +
+      '<nav class="nav"><button class="btn ghost" data-action="start-case" data-id="' + c.id + '" data-code="' + esc(g.code) + '">Retry with this jury</button><button class="btn" data-action="home">Back to home</button></nav>';
   }
 
   function renderSolo() {
@@ -799,7 +809,7 @@
       '<p class="tally">Human jurors (secret ballot): ' + w.yes + " " + t.humanYes + " · " + w.no + " " + t.humanNo + "</p>" +
       (comp ? '<ol class="votes">' + comp + "</ol>" : "") + "</section>" +
       truthHtml(c) +
-      '<p class="muted">Each juror\'s report card is on their phone.</p>' +
+      '<p class="muted">Each juror\'s report card is on their phone.</p>' + replayHtml(g.code) +
       '<nav class="nav"><button class="btn" data-action="end-game">End game</button></nav>';
   }
 
@@ -817,11 +827,11 @@
     return [g.phase, ui.code, ui.hostError, g.foreperson].concat(g.humans.map(function (p) { return p.name + (p.connected ? "+" : "-"); })).join("|");
   }
 
-  function startHost(caseId) {
+  function startHost(caseId, code) {
     stopHost();
     resetTyping();
     stopAuto(); auto.paused = false;
-    ui.g = E.createGame(caseId, "multi");
+    ui.g = E.createGame(caseId, "multi", code);
     ui.code = null;
     ui.hostError = null;
     ui.conns = [];
@@ -1143,7 +1153,7 @@
 
   function phoneVerdict(v, c) {
     return '<header class="page-head verdict"><p class="eyebrow">The verdict</p><h1>' + verdictTitle(c, v.d.verdict) + "</h1></header>" +
-      '<section class="panel"><h2>Your report card</h2>' + reportHtml(v.me.report) + "</section>" +
+      '<section class="panel"><h2>Your report card</h2>' + reportHtml(v.me.report) + replayHtml(v.code) + "</section>" +
       '<p class="muted">The true story is on the courtroom screen.</p>' +
       '<button class="btn ghost" data-action="leave-game">Leave game</button>';
   }
@@ -1201,6 +1211,25 @@
     scrollLog();
   }
 
+  // The replay code to start a case with: the button's own (Retry), the one
+  // typed on the case picker, or "" for a new jury. null means the typed code
+  // isn't valid, and the picker shows why.
+  function replayCode(b) {
+    if (b.dataset.code) return b.dataset.code;
+    var input = document.getElementById("replay-code");
+    var text = input ? input.value.trim() : "";
+    ui.replayText = text;
+    ui.replayError = "";
+    if (!text) return "";
+    var code = E.cleanReplayCode(text);
+    if (code) return code;
+    ui.replayError = "That isn't a replay code. Codes are 4 letters and numbers, like K7QM.";
+    render();
+    var again = document.getElementById("replay-code");
+    if (again) again.focus();
+    return null;
+  }
+
   function go(screen) {
     if (screen !== "solo" && screen !== "host") { stopAuto(); clearTimeout(expiryTimer); }
     ui.screen = screen;
@@ -1246,15 +1275,17 @@
         go("home");
         break;
       case "guide": go("guide"); break;
-      case "pick": ui.pickMode = b.dataset.mode; go("pick"); break;
+      case "pick": ui.pickMode = b.dataset.mode; ui.replayText = ""; ui.replayError = ""; go("pick"); break;
       case "join-screen": ui.phoneError = ""; go("join"); break;
 
       // Solo
       case "start-case":
+        var code = replayCode(b);
+        if (code === null) break;
         resetTyping();
         stopAuto(); auto.paused = false;
         ui.offOpen = false; ui.flagMsg = null;
-        ui.g = E.createGame(b.dataset.id, "solo");
+        ui.g = E.createGame(b.dataset.id, "solo", code);
         ui.showNotebook = false; ui.sel = null; ui.target = null;
         go("solo");
         break;
@@ -1289,7 +1320,10 @@
         break;
 
       // Hosting
-      case "host-case": startHost(b.dataset.id); break;
+      case "host-case":
+        var hostCode = replayCode(b);
+        if (hostCode !== null) startHost(b.dataset.id, hostCode);
+        break;
       case "host-advance": if (!finishIfTyping()) hostAct({ type: "advance" }); break;
       case "sound":
         var turnOn = !S.isOn();
