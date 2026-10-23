@@ -41,7 +41,7 @@
     screen: "home", pickMode: "solo",
     g: null, showNotebook: false, sel: null, target: null,
     host: null, conns: [], code: null, hostError: null, sig: "",
-    offOpen: false, offLine: -1, flagMsg: null, flagSeen: 0,
+    approach: "facts", offOpen: false, offLine: -1, flagMsg: null, flagSeen: 0,
     phone: null, view: null, phoneStatus: "", phoneError: "", retries: 0, lastHeard: 0, editing: false, joinCode: ""
   };
 
@@ -95,7 +95,10 @@
     return log.map(function (l) {
       if (!l.who) return '<li class="sys ' + l.cls + '">' + esc(l.text) + "</li>";
       var mine = l.who === "h" + mineH;
-      return '<li class="msg' + (mine ? " mine" : "") + '"><b>' + esc(whoName(g, l.who)) + "</b><span>" + esc(l.text) + "</span></li>";
+      // Human jurors' moves look different from computer jurors' lines.
+      var human = /^h\d+$/.test(l.who);
+      return '<li class="msg' + (human ? " human" : "") + (mine ? " mine" : "") + (l.cls ? " " + l.cls : "") + '"><b>' + esc(whoName(g, l.who)) +
+        (l.meta ? ' <span class="meta">' + esc(l.meta) + "</span>" : "") + "</b><span>" + esc(l.text) + "</span></li>";
     }).join("");
   }
 
@@ -498,14 +501,29 @@
       '<ellipse class="tabletop" cx="180" cy="112" rx="86" ry="32"></ellipse>' + seats + "</svg>";
   }
 
-  function handHtml(c, notes, used) {
+  function handHtml(c, notes, used, counter) {
     var hand = notes.filter(function (id) { return used.indexOf(id) < 0; });
     var cards = hand.length ? hand.map(function (id) {
       var card = c.cards[id];
+      var answers = counter && !counter.answered && (card.rebuts || []).indexOf(counter.fact) >= 0;
       return '<button class="fact' + (card.bonus ? " bonus" : "") + (ui.sel === id ? " selected" : "") + '" data-action="select" data-card="' + id + '" aria-pressed="' + (ui.sel === id) + '">' +
-        esc(card.title) + '<span class="fact-tags">' + (card.bonus ? "bonus fact · " : "") + card.tags.map(esc).join(" · ") + "</span></button>";
+        esc(card.title) + '<span class="fact-tags">' + (card.bonus ? "bonus fact · " : "") + card.tags.map(esc).join(" · ") + "</span>" +
+        (answers ? '<span class="rebuts">Rebuts ' + esc(E.juror(counter.juror).short) + "'s counter-argument</span>" : "") + "</button>";
     }).join("") : '<p class="muted small">Your notebook has nothing left to use. You can still listen to the others and vote.</p>';
     return { count: hand.length, html: '<div class="hand">' + cards + "</div>" };
+  }
+
+  function approachHtml() {
+    var names = { facts: "Lay out the facts", press: "Press hard", question: "Ask a question" };
+    return '<div class="targets"><span class="muted small">How:</span>' + E.APPROACHES.map(function (a) {
+      return '<button class="chip-btn' + (ui.approach === a ? " on" : "") + '" data-action="approach" data-a="' + a + '" aria-pressed="' + (ui.approach === a) + '">' + names[a] + "</button>";
+    }).join("") + "</div>";
+  }
+
+  function counterHtml(c, counter) {
+    if (!counter || counter.answered) return "";
+    return '<div class="counter-box"><p class="eyebrow">' + esc(E.juror(counter.juror).short) + "'s counter-argument</p><p>" + esc(c.cards[counter.fact].title) + '.</p>' +
+      '<p class="muted small">Answer it with a fact that rebuts it for a bonus, and it stops pulling the jury.</p></div>';
   }
 
   function targetsHtml(ids) {
@@ -524,13 +542,13 @@
     var c = E.findCase(g.caseId);
     var d = g.d;
     var me = g.humans[0];
-    var hand = handHtml(c, me.notebook.concat(me.bonus), me.used);
+    var hand = handHtml(c, me.notebook.concat(me.bonus), me.used, d.counter);
     var controls;
     if (d.voting) {
       controls = '<div class="vote-box"><p><b>Cast your vote.</b> ' + (c.kind === "criminal" ? "All six must agree." : "Five of six must agree.") + "</p>" + voteButtons(c) +
         (d.round <= E.ROUNDS ? '<button class="btn-link" data-action="cancel-vote">Keep talking instead</button>' : "") + "</div>";
     } else {
-      controls = hand.html + targetsHtml(d.computers) +
+      controls = counterHtml(c, d.counter) + hand.html + targetsHtml(d.computers) + approachHtml() +
         '<div class="dialog-nav"><button class="btn ghost" data-action="listen">Let others talk</button>' +
         '<button class="btn ghost" data-action="call-vote">Call a vote</button>' +
         '<button class="btn" data-action="speak"' + (ui.sel && ui.target ? "" : " disabled") + ">Make your point</button></div>";
@@ -1000,11 +1018,11 @@
     } else {
       var chosenCount = live.filter(function (p) { return p.chosen; }).length;
       if (me.choice && !ui.editing) {
-        var said = me.choice.fact ? "You'll say: " + c.cards[me.choice.fact].title + (me.choice.target === "all" ? " (to the whole table)" : " (to " + E.juror(me.choice.target).short + ")") : "You'll let the others talk.";
+        var said = me.choice.fact ? "You'll say: " + c.cards[me.choice.fact].title + (me.choice.target === "all" ? " (to the whole table, " : " (to " + E.juror(me.choice.target).short + ", ") + E.APPROACH_WORDS[me.choice.approach || "facts"] + ")" : "You'll let the others talk.";
         parts.push('<div class="vote-box"><p>' + esc(said) + "</p><p class=\"muted small\">Waiting for the others (" + chosenCount + " of " + live.length + ').</p><button class="btn-link" data-action="m-change">Change my choice</button></div>');
       } else {
-        var hand = handHtml(c, me.notebook.concat(me.bonus), me.used);
-        parts.push(hand.html + (v.computers.length ? targetsHtml(v.computers) : ""));
+        var hand = handHtml(c, me.notebook.concat(me.bonus), me.used, d.counter);
+        parts.push(counterHtml(c, d.counter) + hand.html + (v.computers.length ? targetsHtml(v.computers) + approachHtml() : ""));
         parts.push('<div class="dialog-nav"><button class="btn ghost" data-action="m-pass">Let others talk</button>' +
           '<button class="btn" data-action="m-speak"' + (ui.sel && (ui.target || !v.computers.length) ? "" : " disabled") + ">Make your point</button></div>");
       }
@@ -1148,8 +1166,9 @@
       case "select": ui.sel = ui.sel === b.dataset.card ? null : b.dataset.card; if (ui.screen === "phone") renderPhoneKeepScroll(); else render(); break;
       case "target": if (ui.sel) { ui.target = b.dataset.id; if (ui.screen === "phone") renderPhoneKeepScroll(); else render(); } break;
       case "speak":
-        if (ui.sel && ui.target) { var f = ui.sel, t = ui.target; ui.sel = null; ui.target = null; soloAct({ type: "choose", fact: f, target: t }); }
+        if (ui.sel && ui.target) { var f = ui.sel, t = ui.target; ui.sel = null; ui.target = null; soloAct({ type: "choose", fact: f, target: t, approach: ui.approach }); }
         break;
+      case "approach": ui.approach = b.dataset.a; if (ui.screen === "phone") renderPhoneKeepScroll(); else render(); break;
       case "listen": soloAct({ type: "choose", pass: true }); break;
       case "call-vote": soloAct({ type: "callVote" }); break;
       case "cancel-vote": soloAct({ type: "cancelVote" }); break;
@@ -1210,7 +1229,7 @@
       case "m-ask": phoneSend({ type: "ask", i: Number(b.dataset.i) }); break;
       case "m-speak":
         if (ui.sel) {
-          phoneSend({ type: "choose", fact: ui.sel, target: ui.target || "all" });
+          phoneSend({ type: "choose", fact: ui.sel, target: ui.target || "all", approach: ui.approach });
           ui.sel = null; ui.target = null; ui.editing = false;
         }
         break;

@@ -13,12 +13,14 @@ All cases are fictional. Some borrow the general shape of common real-world case
 3. **Take notes.** When a witness says something important, tap **Write it down**. Your notebook holds 7 facts. Be careful: if the judge throws out an answer and you use it later, the other jurors will trust you less. Keep an eye on the jury box too: computer jurors react to what they hear, and those reactions shape where they stand when deliberation starts.
 4. **Catch contradictions.** If a witness says something that conflicts with a fact in your notebook, tap **Something's off** and pick that fact. Get it right and you earn a strong bonus fact for the jury room. You get 3 tries per trial, and each case has 2 contradictions to find, one helping each side.
 5. **Ask one question.** Some witnesses give you the chance to send the judge a written question. The answer can help either side.
-6. **Deliberate.** In the jury room, play a fact from your notebook and choose who to say it to. Each juror is moved by different kinds of evidence:
-   - **Ruth** by procedure and records
-   - **Dev** by records and timelines
-   - **Carla** by motive, character and witnesses
-   - **Hank** by physical evidence (and he's stubborn)
-   - **Tasha** by procedure and experts
+6. **Deliberate.** In the jury room, each turn you play a fact from your notebook, choose who to say it to, and choose **how**: **Lay out the facts**, **Press hard** or **Ask a question**. Each juror is moved by different kinds of evidence and likes different approaches:
+   - **Ruth:** procedure and records. Likes questions, dislikes being pressed.
+   - **Dev:** records and timelines. Likes the facts laid out, dislikes being pressed.
+   - **Carla:** motive, character and witnesses. Likes questions, dislikes being pressed.
+   - **Hank:** physical evidence, and he's stubborn. Likes being pressed, dislikes questions.
+   - **Tasha:** procedure and experts. Likes questions, dislikes the facts laid out.
+
+   Jurors who disagree push back with a **counter-argument**, a real fact from the trial. Answer it on the next turn with a fact that rebuts it (your notebook marks which ones do) for a bonus, and it stops pulling the jury.
 7. **Vote.** After 6 turns, or whenever you call a vote, the jury votes. Criminal cases must be unanimous. The civil case needs 5 of 6. Otherwise it's a hung jury.
 8. **The reveal.** See what really happened, what the case teaches, and a report card on your jury service.
 
@@ -77,4 +79,5 @@ Open `cases.js`, copy one of the cases in `window.CASES`, and change it. The com
 - **`looks`**: each character's portrait, keyed by their name as it appears in the case: `skin` (0 to 5, light to deep), `hair`, `hairColor`, optional `facial`, `glasses` and `older`, and `clothes`. Anyone without a look gets one generated from their name. A transcript line can set `sfx: "murmur"` to make the gallery murmur after it. A transcript line can set `expression` (`calm`, `nervous`, `angry`, `sad`, `smug` or `surprised`) for the witness's face; otherwise witnesses look nervous on cross-examination and calm on direct.
 - **`contradictions`**: testimony that conflicts with an earlier fact. Each names the conflicting line (give that transcript line a `mark`), the earlier fact (`conflictsWith`), the `bonus` fact the finder earns, and an `explain` text. Give each case one pointing each way.
 - **Reactions**: computer jurors react on their own to facts matching what they care about. A transcript line can add hand-written ones with `react: [{ juror, word, expression }]`.
+- **Deliberation**: a fact can list `rebuts: ["id"]` (the facts it answers) and `replies: { juror: { moved, unmoved } }` for a hand-written reply. Jurors' `approaches` and `replies` (per kind of evidence) live in `window.JURORS` and work for every case.
 - **`truth`**: `lawful` is the verdict the evidence supports, `actual` is what really happened, plus the story and the lesson shown at the end.

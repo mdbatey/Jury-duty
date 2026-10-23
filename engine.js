@@ -8,6 +8,8 @@
   var TRIES = 3;
   // A computer juror's mood can move at most this much from reactions during the trial.
   var REACT_CAP = 10;
+  // How hard an unanswered counter-argument pulls the other computer jurors, per point of the fact's power.
+  var COUNTER_PULL = 2;
 
   // Each contradiction's bonus fact joins the case's facts, so it can be
   // argued like any other fact once a juror earns it.
@@ -480,8 +482,8 @@
 
   // ---------- Deliberation ----------
 
-  function say(g, who, text, cls) {
-    g.d.log.push({ who: who, text: text, cls: cls || "" });
+  function say(g, who, text, cls, meta) {
+    g.d.log.push({ who: who, text: text, cls: cls || "", meta: meta || "" });
   }
 
   function clamp(n) { return Math.max(0, Math.min(100, n)); }
@@ -490,7 +492,7 @@
     var c = findCase(g.caseId);
     var present = seats(g).filter(function (s) { return s.kind === "computer"; }).map(function (s) { return s.juror; });
     g.phase = "deliberation";
-    g.d = { leans: {}, round: 1, log: [], pi: 0, voting: false, verdict: null, tally: null, computers: present.map(function (j) { return j.id; }) };
+    g.d = { leans: {}, round: 1, log: [], pi: 0, voting: false, verdict: null, tally: null, counter: null, countered: [], computers: present.map(function (j) { return j.id; }) };
     // Moods start where the trial left them.
     present.forEach(function (j) { g.d.leans[j.id] = trialLean(g, c, j.id); });
     g.humans.forEach(function (p) { p.choice = null; p.ballot = null; });
@@ -503,12 +505,16 @@
       say(g, null, "The jury files into the jury room and sits around a long table. " + g.humans[g.foreperson].name + " is the foreperson.");
     }
     present.forEach(function (j) { say(g, j.id, c.jury.takes[j.id]); });
+    var LIKED = { facts: "the facts laid out", press: "being pressed hard", question: "questions" };
+    var styles = present.filter(function (j) { return j.approaches; }).map(function (j) {
+      return j.short + " likes " + LIKED[j.approaches.likes] + " and dislikes " + LIKED[j.approaches.dislikes];
+    }).join("; ");
     if (!present.length) {
       say(g, null, "Every seat on this jury is held by a person. Talk it over, and the foreperson can call a vote whenever you're ready.");
     } else if (g.mode === "solo") {
-      say(g, null, "Your turn. Pick a fact from your notebook, then choose who to say it to. Each juror is moved most by certain kinds of evidence: " + likes + ". You have " + ROUNDS + " turns before the final vote.");
+      say(g, null, "Your turn. Pick a fact from your notebook, then choose who to say it to. Each juror is moved most by certain kinds of evidence: " + likes + ". " + (styles ? "How they like to be argued with: " + styles + ". " : "") + "If someone raises a counter-argument, answer it with a fact that rebuts it. You have " + ROUNDS + " turns before the final vote.");
     } else {
-      say(g, null, "Each turn, every juror picks a fact on their phone and chooses who to say it to, or lets the others talk. Computer jurors are moved most by certain kinds of evidence: " + likes + ". You have " + ROUNDS + " turns before the final vote.");
+      say(g, null, "Each turn, every juror picks a fact on their phone and chooses who to say it to, or lets the others talk. Computer jurors are moved most by certain kinds of evidence: " + likes + ". " + (styles ? "How they like to be argued with: " + styles + ". " : "") + "If someone raises a counter-argument, answer it with a fact that rebuts it. You have " + ROUNDS + " turns before the final vote.");
     }
   }
 
@@ -519,7 +525,7 @@
     } else {
       if ((me.notebook.indexOf(a.fact) < 0 && me.bonus.indexOf(a.fact) < 0) || me.used.indexOf(a.fact) >= 0) return false;
       if (a.target !== "all" && g.d.computers.indexOf(a.target) < 0) return false;
-      me.choice = { fact: a.fact, target: a.target };
+      me.choice = { fact: a.fact, target: a.target, approach: APPROACHES.indexOf(a.approach) >= 0 ? a.approach : "facts" };
     }
     if (allChosen(g)) resolveTurn(g);
     return true;
@@ -535,18 +541,61 @@
     return live.length > 0 && live.every(function (p) { return p.ballot; });
   }
 
-  // Everyone's choices play out in seat order, then a computer juror responds.
-  function resolveTurn(g) {
-    g.humans.forEach(function (p, h) {
-      var ch = p.choice;
-      if (ch && ch.fact) playCard(g, h, ch.fact, ch.target);
-      else if (ch || p.connected) say(g, "h" + h, g.mode === "solo" ? "(You stay quiet and let the others talk.)" : "(Lets the others talk.)");
-      p.choice = null;
-    });
-    jurorsTalk(g);
+  var APPROACHES = ["facts", "press", "question"];
+  var APPROACH_WORDS = { facts: "laying out the facts", press: "pressing hard", question: "asking a question" };
+
+  // Liked approaches land about 30% harder; disliked ones about 60% as hard.
+  function approachEffect(j, approach) {
+    if (!j.approaches) return 1;
+    return j.approaches.likes === approach ? 1.3 : j.approaches.dislikes === approach ? 0.6 : 1;
   }
 
-  function playCard(g, h, cardId, target) {
+  // A computer juror's reply: a hand-written line for this fact, else their
+  // line for this kind of evidence, else their stock reply.
+  function replyTo(j, card, outcome) {
+    var own = card.replies && card.replies[j.id] && card.replies[j.id][outcome];
+    if (own) return own;
+    if (outcome !== "agree" && j.replies) {
+      for (var i = 0; i < card.tags.length; i++) if (j.replies[card.tags[i]]) return j.replies[card.tags[i]][outcome];
+    }
+    return j.say[outcome];
+  }
+
+  // Facts the jury actually heard at trial (not unasked juror-question answers).
+  function heardFacts(g) {
+    var out = [];
+    g.beats.forEach(function (b) { if (b.card && g.reached[b.id] && out.indexOf(b.card) < 0) out.push(b.card); });
+    return out;
+  }
+
+  // Everyone's choices play out in seat order. Then a computer juror who
+  // disagrees with the strongest point raises a counter-argument, or, if no
+  // one does, one of the case's scripted points comes up.
+  function resolveTurn(g) {
+    var c = findCase(g.caseId);
+    var d = g.d;
+    var open = d.counter;
+    var moves = [];
+    g.humans.forEach(function (p, h) {
+      var ch = p.choice;
+      if (ch && ch.fact) {
+        var card = c.cards[ch.fact];
+        var rebuttal = !!(open && !open.answered && !card.struck && (card.rebuts || []).indexOf(open.fact) >= 0);
+        var moved = playCard(g, h, ch.fact, ch.target, ch.approach || "facts", rebuttal);
+        if (rebuttal) answerCounter(g, h, open);
+        if (!card.struck) moves.push({ fact: ch.fact, moved: moved });
+      } else if (ch || p.connected) {
+        say(g, "h" + h, g.mode === "solo" ? "(You stay quiet and let the others talk.)" : "(Lets the others talk.)");
+      }
+      p.choice = null;
+    });
+    d.counter = null;
+    moves.sort(function (a, b) { return b.moved - a.moved; });
+    if (!(moves.length && counterArgue(g, moves[0].fact))) scriptedPoint(g);
+    endTurn(g);
+  }
+
+  function playCard(g, h, cardId, target, approach, rebuttal) {
     var c = findCase(g.caseId);
     var d = g.d;
     var me = g.humans[h];
@@ -554,16 +603,17 @@
     var t = threshold(c);
     var present = computers(g);
     me.used.push(cardId);
-    say(g, "h" + h, (target === "all" ? "" : "(to " + juror(target).short + ") ") + card.title + ".");
+    var to = target === "all" ? "the whole table" : juror(target).short;
+    say(g, "h" + h, card.title + ".", "move", "argued to " + to + ", " + APPROACH_WORDS[approach] + (rebuttal ? " · rebuttal" : ""));
     if (card.struck) {
       me.strikes++;
       var fixer = present.filter(function (j) { return j.id === "ruth"; })[0] || present[0];
       if (fixer) say(g, fixer.id, juror("ruth").say.struck);
       say(g, null, "The judge told the jury not to use that. Bringing it up makes the computer jurors trust " + (g.mode === "solo" ? "you" : me.name) + " less for the rest of deliberations.", "warn");
-      return;
+      return 0;
     }
     var cred = Math.pow(0.8, me.strikes);
-    var best = null, bestDelta = 0, before = {};
+    var best = null, bestDelta = 0, before = {}, total = 0;
     present.forEach(function (j) {
       before[j.id] = d.leans[j.id];
       var likes = card.tags.some(function (tag) { return j.likes.indexOf(tag) >= 0; });
@@ -572,19 +622,69 @@
       var caution = c.kind === "criminal" && card.dir > 0 ? 0.7 : 1;
       // The further someone already leans your way, the less one more fact moves them.
       var already = card.dir > 0 ? d.leans[j.id] / 100 : 1 - d.leans[j.id] / 100;
-      var delta = card.dir * card.power * 3.5 * j.sway * cred * caution * (likes ? 1.8 : 1) * (1.3 - already) * share;
+      var delta = card.dir * card.power * 3.5 * j.sway * cred * caution * (likes ? 1.8 : 1) * (1.3 - already) * share *
+        approachEffect(j, approach) * (rebuttal ? 1.5 : 1);
       d.leans[j.id] = clamp(d.leans[j.id] + delta);
+      total += Math.abs(d.leans[j.id] - before[j.id]);
       if (Math.abs(delta) > bestDelta) { bestDelta = Math.abs(delta); best = j.id; }
     });
     var r = target === "all" ? best : target;
-    if (!r) return;
+    if (!r) return total;
     var j = juror(r);
     var real = Math.abs(d.leans[r] - before[r]);
     var agrees = (before[r] >= t) === (card.dir > 0);
-    say(g, r, agrees ? j.say.agree : real >= 8 ? j.say.moved : j.say.unmoved);
+    say(g, r, replyTo(j, card, agrees ? "agree" : real >= 8 ? "moved" : "unmoved"));
+    return total;
   }
 
-  function jurorsTalk(g) {
+  // The juror most strongly against the point raises a fact from the trial
+  // that points the other way. It keeps pulling the jury until someone rebuts it.
+  function counterArgue(g, argued) {
+    var c = findCase(g.caseId);
+    var d = g.d;
+    var t = threshold(c);
+    var card = c.cards[argued];
+    var present = computers(g);
+    var against = present.filter(function (j) { return card.dir > 0 ? d.leans[j.id] < t : d.leans[j.id] >= t; });
+    if (!against.length) return false;
+    against.sort(function (a, b) { return card.dir > 0 ? d.leans[a.id] - d.leans[b.id] : d.leans[b.id] - d.leans[a.id]; });
+    var j = against[0];
+    var answerable = {};
+    Object.keys(c.cards).forEach(function (k) { (c.cards[k].rebuts || []).forEach(function (r) { answerable[r] = true; }); });
+    var options = heardFacts(g).filter(function (k) {
+      var f = c.cards[k];
+      return f.dir === -card.dir && !f.struck && !f.bonus && d.countered.indexOf(k) < 0;
+    });
+    if (!options.length) return false;
+    var score = function (k) {
+      var f = c.cards[k];
+      return (answerable[k] ? 10 : 0) + (f.tags.some(function (x) { return j.likes.indexOf(x) >= 0; }) ? 5 : 0) + f.power;
+    };
+    options.sort(function (a, b) { return score(b) - score(a); });
+    var fact = options[0];
+    var f = c.cards[fact];
+    d.countered.push(fact);
+    say(g, j.id, "But remember: " + f.title + ".", "counter", "counter-argument");
+    var deltas = {};
+    present.forEach(function (o) {
+      var before = d.leans[o.id];
+      // Saying it out loud makes the speaker a little more sure of themselves.
+      d.leans[o.id] = clamp(before + (o.id === j.id ? f.dir * 4 : f.dir * f.power * COUNTER_PULL * o.sway));
+      if (o.id !== j.id) deltas[o.id] = d.leans[o.id] - before;
+    });
+    d.counter = { juror: j.id, fact: fact, deltas: deltas, answered: false };
+    return true;
+  }
+
+  // A rebuttal takes back the counter-argument's pull on the other jurors.
+  function answerCounter(g, h, open) {
+    var d = g.d;
+    Object.keys(open.deltas).forEach(function (id) { d.leans[id] = clamp(d.leans[id] - open.deltas[id]); });
+    open.answered = true;
+    say(g, null, (g.mode === "solo" ? "You answered " : g.humans[h].name + " answered ") + juror(open.juror).short + "'s counter-argument, so it no longer pulls the jury.", "rebuttal");
+  }
+
+  function scriptedPoint(g) {
     var c = findCase(g.caseId);
     var d = g.d;
     var t = threshold(c);
@@ -610,6 +710,10 @@
       }
       break;
     }
+  }
+
+  function endTurn(g) {
+    var d = g.d;
     d.round++;
     if (d.round > ROUNDS && !d.voting) {
       say(g, null, "Hours have passed. A note arrives from the judge asking whether the jury has reached a verdict. It's time for a final vote.");
@@ -689,7 +793,8 @@
       foreperson: g.foreperson,
       humans: g.humans.map(function (p) { return { name: p.name, connected: p.connected, chosen: !!p.choice, voted: !!p.ballot }; }),
       computers: computers(g).map(function (j) { return j.id; }),
-      d: g.d ? { round: g.d.round, log: g.d.log, voting: g.d.voting, verdict: g.d.verdict, tally: g.d.tally, moods: moods } : null,
+      d: g.d ? { round: g.d.round, log: g.d.log, voting: g.d.voting, verdict: g.d.verdict, tally: g.d.tally, moods: moods,
+        counter: g.d.counter ? { juror: g.d.counter.juror, fact: g.d.counter.fact, answered: g.d.counter.answered } : null } : null,
       me: {
         h: h, name: me.name, notebook: me.notebook.slice(), used: me.used.slice(), askUsed: me.askUsed, strikes: me.strikes,
         bonus: me.bonus.slice(), found: me.found.slice(), tries: me.tries, lastFlag: me.lastFlag,
@@ -705,6 +810,7 @@
     findCase: findCase, juror: juror, words: words, threshold: threshold, needed: needed, initials: initials,
     mood: mood, exhibit: exhibit, castOf: castOf, person: person,
     createGame: createGame, join: join, setConnected: setConnected, seats: seats, computers: computers,
+    APPROACHES: APPROACHES, APPROACH_WORDS: APPROACH_WORDS,
     available: available, flagLines: flagLines, TRIES: TRIES, apply: apply, report: report, viewFor: viewFor
   };
 })();

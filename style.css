@@ -414,6 +414,13 @@ p { margin: 0; }
 .bubble { animation: pop 0.25s ease both; pointer-events: none; }
 @keyframes pop { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
+.log .msg.human span:last-child { border-left: 3px solid var(--brass); }
+.log .msg .meta { font: 500 0.7rem var(--font-body); text-transform: none; letter-spacing: 0; color: var(--muted); font-style: italic; }
+.log .msg.counter span:last-child { border: 1px dashed var(--def); }
+.log .sys.rebuttal { color: var(--no); font-style: normal; font-weight: 600; }
+.counter-box { border: 1px dashed var(--def); border-radius: 6px; padding: 0.6rem 0.85rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.fact .rebuts { font: 600 0.72rem var(--font-body); color: var(--no); }
+
 @media (prefers-reduced-motion: reduce) {
   .bubble { animation: none; }
   .tok { transition: none; }
