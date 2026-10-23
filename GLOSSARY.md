@@ -67,3 +67,29 @@ _Avoid_: Mood (that means a computer juror's leaning), emotion, face
 **Report card**:
 A juror's private summary at the end of a case: their notebook, whether they argued with thrown-out evidence, and how their ballot compared with the verdict the evidence supports.
 _Avoid_: Score, results
+
+## Noticing and arguing
+
+**Contradiction**:
+Testimony that conflicts with a fact already in a juror's notebook. A juror who points one out earns a bonus fact.
+_Avoid_: Inconsistency, gotcha, lie
+
+**Bonus fact**:
+A strong fact a juror earns by finding a contradiction. It does not take a notebook slot.
+_Avoid_: Reward card, clue
+
+**Reaction**:
+A computer juror's brief, visible response to a moment in the trial (a change of expression and a short word) that nudges their mood.
+_Avoid_: Emote, tell
+
+**Approach**:
+How a juror makes their point in the jury room: lay out the facts, press hard, or ask a question.
+_Avoid_: Tone, style, tactic
+
+**Counter-argument**:
+A fact from the trial that a computer juror raises against the point just made.
+_Avoid_: Comeback, objection (that word belongs to the lawyers)
+
+**Rebuttal**:
+Answering a counter-argument with a fact that directly addresses it.
+_Avoid_: Reply, counter-counter
