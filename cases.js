@@ -8,6 +8,7 @@ window.JURORS = [
   {
     id: "ruth", name: "Ruth Abernathy", short: "Ruth", job: "Retired schoolteacher",
     bio: "Sticks to the rules. If the judge said to ignore something, she will remind you.",
+    look: {skin: 1, hair: "bun", hairColor: "white", older: true, glasses: true, clothes: "#6b4f8a"},
     likes: ["procedure", "records"], sway: 0.9,
     say: {
       agree: "Exactly my thinking.",
@@ -19,6 +20,7 @@ window.JURORS = [
   {
     id: "dev", name: "Dev Malhotra", short: "Dev", job: "Software engineer",
     bio: "Wants timelines and records. Feelings don't do much for him.",
+    look: {skin: 3, hair: "side", hairColor: "black", glasses: true, clothes: "#2e5a88"},
     likes: ["records", "timeline"], sway: 1,
     say: {
       agree: "Right. The facts back that up.",
@@ -29,6 +31,7 @@ window.JURORS = [
   {
     id: "carla", name: "Carla Mendes", short: "Carla", job: "ER nurse",
     bio: "Reads people. Cares about why someone would do something and whether witnesses seem honest.",
+    look: {skin: 2, hair: "long", hairColor: "brown", clothes: "#3e6b55"},
     likes: ["motive", "character", "witness"], sway: 1.1,
     say: {
       agree: "Yes. That's how I see it too.",
@@ -39,6 +42,7 @@ window.JURORS = [
   {
     id: "hank", name: "Hank Duffy", short: "Hank", job: "Retired contractor",
     bio: "Stubborn. Trusts things he can see and touch more than anyone's story.",
+    look: {skin: 0, hair: "bald", hairColor: "gray", older: true, facial: "beard", clothes: "#8a3b3b"},
     likes: ["physical"], sway: 0.6,
     say: {
       agree: "Now you're talking.",
@@ -49,6 +53,7 @@ window.JURORS = [
   {
     id: "tasha", name: "Tasha Greene", short: "Tasha", job: "College student",
     bio: "Doesn't take authority at its word. Pays close attention to how police and experts did their jobs.",
+    look: {skin: 5, hair: "curly", hairColor: "black", clothes: "#9a7420"},
     likes: ["procedure", "expert"], sway: 1,
     say: {
       agree: "Thank you. Finally someone said it.",
@@ -64,6 +69,9 @@ window.JURORS = [
 // Transcript lines are { q, a } pairs. Optional extras on a line:
 //   card: "id"      the player can write this fact in their notebook
 //   show: "label"   display the exhibit with that label
+//   expression: "sad"   the witness's face for that answer (calm, nervous,
+//                       angry, sad, smug, surprised). Default: nervous on
+//                       cross-examination, calm otherwise.
 // Objection lines: { objection, by: "plaintiff" | "defense", ruling, note }
 //
 // cards: facts the player can collect and argue with in the jury room.
@@ -72,6 +80,9 @@ window.JURORS = [
 //   tags: what kind of evidence it is (matches juror `likes`)
 //   struck: set when the judge said the jury can't use it. Using it backfires.
 //
+// looks: each character's portrait, keyed by their name as it appears in the
+//   case (skin 0-5 light to deep, hair, hairColor, facial, glasses, older,
+//   clothes). Anyone without a look gets one generated from their name.
 // jury.start: each juror's starting opinion, 0 to 100 (100 = sure of guilt).
 // jury.takes: what each juror says first in the jury room.
 // jury.points: arguments the computer jurors raise during deliberation.
@@ -88,6 +99,15 @@ window.CASES = [
     charge: "Theft of more than $1,000 from an employer",
     blurb: "Over three weeks, $4,200 vanished from a small bakery's bank deposits. The assistant manager closed on most of those nights.",
     length: "About 20 minutes",
+    looks: {
+      "Court clerk": {skin: 2, hair: "short", hairColor: "brown", glasses: true, clothes: "#4a5568"},
+      "Judge Harriet Vance": {skin: 5, hair: "short", hairColor: "gray", older: true, glasses: true, clothes: "#22262e"},
+      "Prosecutor Renee Okafor": {skin: 4, hair: "bun", hairColor: "black", clothes: "#2e5a88"},
+      "Defense attorney Sam Pruitt": {skin: 0, hair: "side", hairColor: "auburn", clothes: "#4a5568"},
+      "Dana Whitlock": {skin: 1, hair: "ponytail", hairColor: "brown", clothes: "#3e6b55"},
+      "Marty Feld": {skin: 0, hair: "bald", hairColor: "gray", older: true, facial: "mustache", clothes: "#9a7420"},
+      "Detective Luis Arroyo": {skin: 3, hair: "short", hairColor: "black", facial: "mustache", clothes: "#5a4632"}
+    },
     parties: {
       plaintiff: { label: "The State", lawyer: "Prosecutor Renee Okafor" },
       defense: { label: "Dana Whitlock", lawyer: "Defense attorney Sam Pruitt" }
@@ -157,7 +177,7 @@ window.CASES = [
           { q: "Mr. Feld, the bank bags you use. Are they the tamper-evident kind, that show if they've been opened?", a: "No. They're plain zipper bags. The tamper-proof ones cost more.", card: "plain-bags" },
           { q: "Who knows the combination to the office safe?", a: "Me, Dana, and my nephew Kyle." },
           { q: "What does Kyle do at the bakery?", a: "He's our early baker. He comes in around four in the morning, alone, to start the bread." },
-          { q: "So on the nights Dana put the bag in the safe, Kyle was alone in the building with it for about three hours before she arrived?", a: "I suppose so. But Kyle is family.", card: "kyle-alone" },
+          { q: "So on the nights Dana put the bag in the safe, Kyle was alone in the building with it for about three hours before she arrived?", a: "I suppose so. But Kyle is family.", card: "kyle-alone", expression: "surprised" },
           { q: "The two short nights that weren't Dana's. Who closed those?", a: "Kyle covered those two shifts.", card: "kyle-closed" }
         ],
         jurorQuestion: [
@@ -214,7 +234,7 @@ window.CASES = [
           { q: "Dana, did you take any money from Crumb & Co.?", a: "No. Never." },
           { q: "Why did you keep the bag in the safe overnight?", a: "The night drop is in an alley with no lights. A man followed me there once in January. After that I dropped it in the morning. Marty said that was fine." },
           { q: "Where did the money for the car come from?", a: "My $3,100 tax refund, plus about $700 I'd saved in cash at home. My old car died and I needed to get to work." },
-          { q: "What about that text to your sister?", a: "I was scared. I was behind on rent. But being broke doesn't make me a thief." }
+          { q: "What about that text to your sister?", a: "I was scared. I was behind on rent. But being broke doesn't make me a thief.", expression: "sad" }
         ],
         cross: [
           { q: "The $700 you say you had at home. Any record of that?", a: "No. It was cash in a coffee can.", card: "no-record-700" },
@@ -291,6 +311,15 @@ window.CASES = [
     charge: "Negligence: failing to deal with a dangerous tree",
     blurb: "A storm brought a huge oak down onto a neighbor's garage. Was it bad luck, or did the owner ignore the warning signs?",
     length: "About 15 minutes",
+    looks: {
+      "Court clerk": {skin: 4, hair: "ponytail", hairColor: "black", clothes: "#4a5568"},
+      "Judge Elena Moreau": {skin: 2, hair: "long", hairColor: "chestnut", glasses: true, clothes: "#22262e"},
+      "Attorney Priya Natarajan": {skin: 3, hair: "long", hairColor: "black", clothes: "#8a3b3b"},
+      "Attorney Tom Reyes": {skin: 2, hair: "short", hairColor: "black", facial: "beard", clothes: "#2e5a88"},
+      "Joan Hollis": {skin: 1, hair: "curly", hairColor: "gray", older: true, glasses: true, clothes: "#6b4f8a"},
+      "Gary Brandt": {skin: 0, hair: "buzz", hairColor: "blonde", clothes: "#3e6b55"},
+      "Dr. Wendell Achebe": {skin: 5, hair: "short", hairColor: "gray", older: true, glasses: true, facial: "beard", clothes: "#4a5568"}
+    },
     parties: {
       plaintiff: { label: "Joan Hollis", lawyer: "Attorney Priya Natarajan" },
       defense: { label: "Gary Brandt", lawyer: "Attorney Tom Reyes" }
@@ -356,7 +385,7 @@ window.CASES = [
         direct: [
           { q: "Ms. Hollis, what did you notice about the oak before it fell?", a: "It leaned more every year toward my garage. Big dead branches fell on my driveway. And there were big shelf mushrooms growing at the bottom of the trunk.", card: "warning-signs" },
           { q: "What did you do about it?", a: "I talked to Gary twice. Then I wrote him a letter, because I wanted it on paper. This is it.", card: "letter", show: "Plaintiff's Exhibit 1" },
-          { q: "What happened on June 9?", a: "Around 11 at night there was a huge crack, then a crash. The oak split near the bottom and fell right across my garage. It crushed the roof and my car inside." }
+          { q: "What happened on June 9?", a: "Around 11 at night there was a huge crack, then a crash. The oak split near the bottom and fell right across my garage. It crushed the roof and my car inside.", expression: "sad" }
         ],
         cross: [
           { q: "Ms. Hollis, you're not a tree expert, are you?", a: "No. I looked it up online, and it said those mushrooms can mean rot." },
@@ -380,7 +409,7 @@ window.CASES = [
         intro: "An expert witness may give opinions about their specialty. Ordinary witnesses can only say what they saw or heard. You don't have to accept an expert's opinion.",
         direct: [
           { q: "Dr. Achebe, what did you find when you examined the fallen tree?", a: "Advanced heart rot. About 70 percent of the trunk's interior was decayed at the break. The mushrooms Ms. Hollis saw are the fruiting bodies of a rot fungus.", card: "rot-70", show: "Plaintiff's Exhibit 2" },
-          { q: "Would a certified arborist have noticed that?", a: "Almost certainly. The fungus, the lean and the dead limbs are textbook warning signs. A resistance drill test would have confirmed the rot in about ten minutes.", card: "detectable" },
+          { q: "Would a certified arborist have noticed that?", a: "Almost certainly. The fungus, the lean and the dead limbs are textbook warning signs. A resistance drill test would have confirmed the rot in about ten minutes.", card: "detectable", expression: "smug" },
           { q: "Would a healthy oak have survived the storm?", a: "In my opinion, more likely than not, yes. A trunk that's 70 percent hollow has very little strength left.", card: "would-survive" }
         ],
         cross: [
@@ -485,6 +514,17 @@ window.CASES = [
     charge: "Armed robbery of a convenience store",
     blurb: "A clerk picked a man out of a photo lineup after a fast, frightening robbery. Is that enough to convict him?",
     length: "About 20 minutes",
+    looks: {
+      "Court clerk": {skin: 1, hair: "bun", hairColor: "chestnut", clothes: "#4a5568"},
+      "Judge Raymond Ostrowski": {skin: 0, hair: "side", hairColor: "white", older: true, clothes: "#22262e"},
+      "Prosecutor Allen Cho": {skin: 1, hair: "side", hairColor: "black", glasses: true, clothes: "#4a5568"},
+      "Public defender Gloria Estes": {skin: 3, hair: "curly", hairColor: "black", clothes: "#8a3b3b"},
+      "Marcus Bell": {skin: 4, hair: "buzz", hairColor: "black", facial: "beard", clothes: "#2f4f4f"},
+      "Nadia Petrov": {skin: 0, hair: "long", hairColor: "blonde", clothes: "#2e5a88"},
+      "Detective Frank Gilroy": {skin: 1, hair: "short", hairColor: "gray", older: true, facial: "mustache", clothes: "#5a4632"},
+      "Dr. Simone Laurent": {skin: 2, hair: "bun", hairColor: "auburn", glasses: true, clothes: "#3e6b55"},
+      "Theo Banks": {skin: 5, hair: "short", hairColor: "black", clothes: "#9a7420"}
+    },
     parties: {
       plaintiff: { label: "The State", lawyer: "Prosecutor Allen Cho" },
       defense: { label: "Marcus Bell", lawyer: "Public defender Gloria Estes" }
@@ -551,7 +591,7 @@ window.CASES = [
         name: "Nadia Petrov",
         role: "Store clerk, the victim",
         direct: [
-          { q: "Ms. Petrov, tell us what happened.", a: "A man came in with his hood up, pulled out a knife and said, 'Open it. Now.' I gave him everything in the register. About $340. He ran out." },
+          { q: "Ms. Petrov, tell us what happened.", a: "A man came in with his hood up, pulled out a knife and said, 'Open it. Now.' I gave him everything in the register. About $340. He ran out.", expression: "sad" },
           { q: "How close was he? Could you see his face?", a: "Across the counter. Maybe three feet. The lights in the store are very bright.", card: "face-to-face" },
           { q: "Three days later, did a detective show you photographs?", a: "Yes. Six photos. I picked number four. Him.", card: "picked-lineup" },
           { q: "How sure are you today?", a: "I'm certain. I will never forget his face.", card: "certain-now" }
@@ -560,7 +600,7 @@ window.CASES = [
           { q: "How long was the man in the store, with his hood up?", a: "A minute and a half. Two minutes. His hood was up the whole time.", card: "two-minutes" },
           { q: "During that time, where were your eyes?", a: "On him. And on the knife, I guess. I was scared he'd use it.", card: "knife-focus" },
           { q: "When you picked photo four, what exactly did you say?", a: "I think I said, 'I'm pretty sure it's him.'", card: "pretty-sure" },
-          { q: "And what did the detective say back?", a: "He said, 'Good. That's who we thought.' After that I felt more sure.", card: "feedback" }
+          { q: "And what did the detective say back?", a: "He said, 'Good. That's who we thought.' After that I felt more sure.", card: "feedback", expression: "surprised" }
         ]
       },
       {

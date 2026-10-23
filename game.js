@@ -2,6 +2,7 @@
   "use strict";
 
   var E = window.JuryEngine;
+  var P = window.JuryPortraits;
   var Net = window.JuryNet;
   var CASES = window.CASES || [];
   var JURORS = window.JURORS || [];
@@ -75,7 +76,7 @@
         return { id: s.id, seat: i, name: solo ? "You" : p.name, ini: solo ? "YOU" : E.initials(p.name), kind: solo ? "you" : "human", human: true, connected: p.connected };
       }
       var m = g.d ? E.mood(c, g.d.leans[s.id]) : null;
-      return { id: s.id, seat: i, name: s.juror.short, full: s.juror.name, ini: E.initials(s.juror.name), kind: "juror", mood: m };
+      return { id: s.id, seat: i, name: s.juror.short, full: s.juror.name, ini: E.initials(s.juror.name), kind: "juror", mood: m, look: P.lookFor(null, s.juror.name, s.juror.look) };
     });
   }
 
@@ -100,7 +101,7 @@
 
   function renderHome() {
     var cast = JURORS.map(function (j) {
-      return '<li class="juror-card"><span class="tok-chip">' + esc(E.initials(j.name)) + "</span><div><p><b>" + esc(j.name) + '</b> <span class="muted small">' + esc(j.job) + "</span></p>" +
+      return '<li class="juror-card"><span class="portrait small-portrait">' + P.svg(P.lookFor(null, j.name, j.look), "calm", { size: 48 }) + "</span><div><p><b>" + esc(j.name) + '</b> <span class="muted small">' + esc(j.job) + "</span></p>" +
         '<p class="muted small">' + esc(j.bio) + "</p></div></li>";
     }).join("");
     return '<header class="hero">' +
@@ -160,20 +161,21 @@
 
   function renderBoard(c, g) {
     var court = E.castOf(c).map(function (p) {
-      return { id: p.id, name: p.name, ini: p.ini, kind: p.kind };
+      return { id: p.id, name: p.name, ini: p.ini, kind: p.kind, look: P.lookFor(c, p.name) };
     });
     var jury = juryPeople(g).map(function (p) {
-      return { id: p.id, name: p.full || p.name, ini: p.ini, kind: p.kind, spot: "j" + p.seat, away: p.human && !p.connected };
+      return { id: p.id, name: p.full || p.name, ini: p.ini, kind: p.kind, spot: "j" + p.seat, away: p.human && !p.connected, look: p.look };
     });
     var tokens = court.concat(jury).map(function (p) {
       var spot = p.spot ? SPOTS[p.spot] : null;
       return '<g class="tok ' + kindClass(p.kind) + (p.away ? " away" : "") + '" data-tok="' + p.id + '"' +
         (spot ? ' style="transform: translate(' + spot[0] + "px," + spot[1] + 'px)"' : "") + "><title>" + esc(p.name) + "</title>" +
         '<circle class="ring" r="18"></circle><circle class="disc" r="14"></circle>' +
-        '<text class="ini" dy="3.5">' + esc(p.ini) + "</text></g>";
+        (p.look ? '<g class="face" data-expr="calm">' + P.tokenFace(p.look, "calm", 13, "tok-clip") + "</g>" : '<text class="ini" dy="3.5">' + esc(p.ini) + "</text>") + "</g>";
     }).join("");
     var pLabel = c.kind === "criminal" ? "PROSECUTION" : "PLAINTIFF";
     return '<svg class="board" viewBox="0 0 360 430" role="img" aria-label="Top-down view of the courtroom">' +
+      '<defs><clipPath id="tok-clip"><circle r="13"></circle></clipPath></defs>' +
       '<rect class="floor" x="2" y="2" width="356" height="426" rx="10"></rect>' +
       '<rect class="well" x="96" y="108" width="248" height="200" rx="6"></rect>' +
       '<rect class="wood" x="118" y="14" width="124" height="48" rx="4"></rect><text class="lbl" x="180" y="74">BENCH</text>' +
@@ -199,6 +201,12 @@
       var el = board.querySelector('[data-tok="' + p.id + '"]');
       var spot = SPOTS[b.pos[p.id]] || SPOTS[p.home];
       el.style.transform = "translate(" + spot[0] + "px," + spot[1] + "px)";
+      var face = el.querySelector(".face");
+      var expr = p.id === b.who ? b.expression || "calm" : "calm";
+      if (face && face.getAttribute("data-expr") !== expr) {
+        face.setAttribute("data-expr", expr);
+        face.innerHTML = P.tokenFace(P.lookFor(c, p.name), expr, 13, "tok-clip");
+      }
     });
     Array.prototype.forEach.call(board.querySelectorAll(".tok"), function (el) {
       el.classList.toggle("speaking", el.getAttribute("data-tok") === b.who);
@@ -213,7 +221,7 @@
   function speechHtml(c, b, extra) {
     var p = b.who ? E.person(c, b.who) : null;
     var head = p
-      ? '<p class="who"><span class="tok-chip ' + kindClass(p.kind) + '">' + esc(p.ini) + "</span><span><b>" + esc(p.name) + '</b><span class="muted small">' + esc(p.role) + "</span></span></p>"
+      ? '<p class="who"><span class="portrait ' + kindClass(p.kind) + '">' + P.svg(P.lookFor(c, p.name), b.expression || "calm", { size: 64 }) + "</span><span><b>" + esc(p.name) + '</b><span class="muted small">' + esc(p.role) + "</span></span></p>"
       : '<p class="who guide-who"><span class="eyebrow">What\'s happening</span></p>';
     var x = b.show ? E.exhibit(c, b.show) : null;
     var ex = x ? '<figure class="exhibit"><span class="sticker">' + esc(x.label) + "</span><figcaption>" + esc(x.title) + "</figcaption><pre>" + esc(x.body) + "</pre></figure>" : "";
@@ -377,10 +385,12 @@
       var pick = pickable && !p.human;
       return '<g class="seat ' + m.cls + (ui.target === p.id ? " targeted" : "") + (pick ? " pickable" : "") + '" transform="translate(' + xy[0].toFixed(1) + " " + xy[1].toFixed(1) + ')"' +
         (pick ? ' data-action="target" data-id="' + p.id + '" tabindex="0" role="button" aria-label="Talk to ' + esc(p.name) + '"' : "") + ">" +
-        '<circle class="ring" r="20"></circle><circle class="disc" r="15"></circle><text class="ini" dy="3.5">' + esc(p.ini) + "</text>" +
+        '<circle class="ring" r="20"></circle><circle class="disc" r="15"></circle>' +
+        (p.look ? P.tokenFace(p.look, "calm", 13.5, "seat-clip") : '<text class="ini" dy="3.5">' + esc(p.ini) + "</text>") +
         '<text class="seat-name" y="33">' + esc(p.name) + '</text><text class="seat-mood" y="45">' + esc(m.label) + "</text></g>";
     }).join("");
     return '<svg class="table-svg" viewBox="0 0 360 252" role="img" aria-label="The jury table">' +
+      '<defs><clipPath id="seat-clip"><circle r="13.5"></circle></clipPath></defs>' +
       '<ellipse class="tabletop" cx="180" cy="112" rx="86" ry="32"></ellipse>' + seats + "</svg>";
   }
 
@@ -503,7 +513,7 @@
   function renderLobby(c) {
     var g = ui.g;
     var people = juryPeople(g).map(function (p) {
-      return '<li class="lobby-seat' + (p.human ? " human" : "") + '"><span class="tok-chip ' + kindClass(p.kind) + '">' + esc(p.ini) + "</span><span><b>" + esc(p.name) + "</b>" +
+      return '<li class="lobby-seat' + (p.human ? " human" : "") + '">' + (p.look ? '<span class="portrait small-portrait">' + P.svg(p.look, "calm", { size: 40, crop: "face" }) + "</span>" : '<span class="tok-chip ' + kindClass(p.kind) + '">' + esc(p.ini) + "</span>") + "<span><b>" + esc(p.name) + "</b>" +
         '<span class="muted small">' + (p.human ? "Juror " + (p.seat + 1) + (p.seat === g.foreperson ? " · Foreperson" : "") + (p.connected ? "" : " · Away") : "Computer juror") + "</span></span></li>";
     }).join("");
     var body = ui.hostError

@@ -160,12 +160,13 @@
           part[2].forEach(function (l) {
             if (l.objection) {
               var objector = l.by === "defense" ? "dl" : "pl";
-              beat({ who: objector, text: "Objection, Your Honor. " + l.objection + ".", phase: phase, kind: "objection", step: si });
-              beat({ who: "judge", text: l.ruling + "." + (l.ruling === "Sustained" ? " The jury will disregard that answer." : ""), phase: phase, step: si });
+              beat({ who: objector, text: "Objection, Your Honor. " + l.objection + ".", phase: phase, kind: "objection", step: si, expression: "angry" });
+              beat({ who: "judge", text: l.ruling + "." + (l.ruling === "Sustained" ? " The jury will disregard that answer." : ""), phase: phase, step: si, expression: "calm" });
               guide(l.note, phase, si);
             } else {
               beat({ who: part[1], text: l.q, phase: phase, step: si });
-              beat({ who: w, text: l.a, phase: phase, card: l.card, show: l.show, step: si });
+              // Witnesses look nervous under cross-examination unless a line says otherwise.
+              beat({ who: w, text: l.a, phase: phase, card: l.card, show: l.show, step: si, expression: l.expression || (part[0] === "Cross-examination" ? "nervous" : "calm") });
             }
           });
           pos[part[1]] = part[1] === "dl" ? "d1" : "p1";
@@ -359,7 +360,7 @@
     var base = { pos: b.pos, phase: "Juror question", step: b.step };
     g.beats.splice(g.beat + 1, 0,
       Object.assign({}, base, { who: "judge", text: "A juror asks: \"" + q.q + "\" Please answer the question." }),
-      Object.assign({}, base, { who: b.witness, text: q.a, card: q.card }));
+      Object.assign({}, base, { who: b.witness, text: q.a, card: q.card, expression: q.expression || "calm" }));
     g.beat++;
     return true;
   }
