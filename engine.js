@@ -176,6 +176,7 @@
         beat({ who: "clerk", text: "Please raise your right hand. Do you swear to tell the truth, the whole truth, and nothing but the truth?", phase: ph2, step: si });
         beat({ who: w, text: "I do.", phase: ph2, step: si });
         if (s.intro) guide(s.intro, ph2, si);
+        if (s.jurorQuestion) guide("Heads up: after cross-examination, each juror can send this witness one written question. Think about what you'd want to know.", ph2, si);
         [["Direct examination", caller, s.direct], ["Cross-examination", crosser, s.cross]].forEach(function (part, pi) {
           var phase = part[0] + ": " + s.name;
           // Spoken hand-offs make it clear which side is asking.
@@ -400,6 +401,13 @@
         return ask(g, h, a.i);
       case "flag":
         return flag(g, h, a.line, a.fact);
+      case "noQuestion":
+        var qb = g.beats[g.beat];
+        if (!me || g.phase !== "trial" || !qb || qb.kind !== "ask" || me.askUsed) return false;
+        qb.passed = qb.passed || {};
+        if (qb.passed[h]) return false;
+        qb.passed[h] = true;
+        return true;
       case "choose":
         return delib && !g.d.voting && me ? choose(g, h, a) : false;
       case "closeTurn":
@@ -797,7 +805,8 @@
     }
     var total = (c.contradictions || []).length;
     if (total) rows.push({ title: "Contradictions found", text: me.found.length + " of " + total + ".", ok: me.found.length > 0 });
-    rows.push({ title: "Notes taken", text: good + " useful facts written down" + (badNotes ? ", plus " + badNotes + " the judge threw out" : "") + ". You asked " + (me.askUsed ? "one" : "no") + " juror question.", ok: good >= 5 && !badNotes });
+    rows.push({ title: "Notes taken", text: good + " useful facts written down" + (badNotes ? ", plus " + badNotes + " the judge threw out" : "") + ".", ok: good >= 5 && !badNotes });
+    rows.push({ title: "Juror question", text: me.askUsed ? "You asked one. Good use of a rare chance to hear something the lawyers didn't ask." : "You didn't use your juror question. It comes right after one witness's cross-examination, so watch for the judge's invitation.", ok: me.askUsed });
     rows.push({ title: "Played by the rules", text: me.strikes ? "You used thrown-out evidence " + me.strikes + (me.strikes === 1 ? " time." : " times.") : "You only argued with admitted evidence.", ok: !me.strikes });
     return rows;
   }
@@ -815,7 +824,7 @@
       phase: g.phase,
       beatIndex: g.beat,
       beatsLen: g.beats.length,
-      beat: g.phase === "trial" && b ? { who: b.who, text: b.text, phase: b.phase, kind: b.kind, show: b.show, step: b.step, askedBy: b.askedBy } : null,
+      beat: g.phase === "trial" && b ? { who: b.who, text: b.text, phase: b.phase, kind: b.kind, show: b.show, step: b.step, askedBy: b.askedBy, passed: !!(b.passed && b.passed[h]) } : null,
       foreperson: g.foreperson,
       humans: g.humans.map(function (p) { return { name: p.name, connected: p.connected, chosen: !!p.choice, voted: !!p.ballot }; }),
       computers: computers(g).map(function (j) { return j.id; }),

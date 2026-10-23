@@ -323,7 +323,8 @@
   }
 
   function someoneCanAsk(g) {
-    return g.humans.some(function (p) { return p.connected && !p.askUsed; });
+    var b = g.beats[g.beat];
+    return g.humans.some(function (p, h) { return p.connected && !p.askUsed && !(b.passed && b.passed[h]); });
   }
 
   function scheduleAuto() {
@@ -506,7 +507,7 @@
     if (b.card && me.notebook.indexOf(b.card) >= 0) extra += '<div class="note-row"><span class="noted">Written in your notebook</span><span class="card-title">' + esc(c.cards[b.card].title) + "</span></div>";
     if (b.kind === "ask") {
       if (me.askUsed) extra += '<p class="muted small">You have already used your one question.</p>';
-      else extra += askButtons(c, b) + '<p class="muted small">Or tap Next to skip your question.</p>';
+      else extra += askButtons(c, b) + '<p class="muted small">You get one question for the whole trial. Pick one, or skip it.</p>';
     }
     if (ui.flagMsg && ui.flagMsg.beat === g.beat) extra += flagResultHtml(c, ui.flagMsg.flag);
     else if (E.flagLines(g).indexOf(g.beat) >= 0 && me.tries > 0) extra += offHtml(c, me, "");
@@ -516,7 +517,7 @@
       '<div class="dialog-nav">' +
       '<button class="btn ghost" data-action="back"' + (g.beat === 0 ? " disabled" : "") + ">Back</button>" +
       '<button class="btn ghost" data-action="notebook">Notebook ' + me.notebook.length + "/" + E.NOTE_LIMIT + "</button>" +
-      '<button class="btn" data-action="advance" id="next-btn">' + (last ? "Go to the jury room" : "Next") + "</button></div>" +
+      '<button class="btn" data-action="advance" id="next-btn">' + (last ? "Go to the jury room" : b.kind === "ask" && !me.askUsed ? "Skip my question" : "Next") + "</button></div>" +
       (ui.showNotebook ? notebookHtml(c, me.notebook, true, me.bonus) : "");
   }
 
@@ -756,9 +757,10 @@
     var extra = "";
     if (b.card) extra += '<div class="note-row"><span class="card-title">Jurors can write this down: ' + esc(c.cards[b.card].title) + "</span></div>";
     if (b.kind === "ask") {
+      var deciding = g.humans.filter(function (p, h) { return p.connected && !p.askUsed && !(b.passed && b.passed[h]); }).map(function (p) { return p.name; });
       extra += '<p class="muted small">' + (b.askedBy !== undefined
         ? esc(g.humans[b.askedBy].name) + " sent a question."
-        : "Each juror can send one question from their phone during the trial. The first one sent is asked.") + "</p>";
+        : "Jurors are choosing a question on their phones. The first one sent is asked." + (deciding.length ? " Still deciding: " + esc(deciding.join(", ")) + "." : "")) + "</p>";
     }
     var last = g.beat === g.beats.length - 1;
     return phaseHtml(b, g.beat, g.beats.length) + speechHtml(c, b, extra) +
@@ -1077,15 +1079,18 @@
     var controls = fore
       ? '<div class="dialog-nav"><button class="btn ghost" data-action="m-back"' + (v.beatIndex === 0 ? " disabled" : "") + ">Back</button>" +
         '<button class="btn ghost" data-action="m-pause">' + (ui.hostPaused ? "Resume" : "Pause") + "</button>" +
-        '<button class="btn" data-action="m-advance">' + (v.beatIndex === v.beatsLen - 1 ? "Go to the jury room" : "Next") + "</button></div>"
+        '<button class="btn" data-action="m-advance">' + (v.beatIndex === v.beatsLen - 1 ? "Go to the jury room" : b.kind === "ask" && b.askedBy === undefined ? "Skip questions" : "Next") + "</button></div>"
       : "";
     var list = factListHtml(c, me.factTimes || [], me.notebook, "m-write");
     var facts = list ? '<section class="panel">' + list + "</section>" : "";
     var ask = "";
     if (b.kind === "ask" && b.askedBy === undefined && !me.askUsed) {
       var s = c.steps[b.step];
-      ask = '<section class="panel"><p class="eyebrow">Your juror question</p><p class="muted small">You get one question this trial. The first juror to send one gets it asked.</p><div class="ask">' +
-        s.jurorQuestion.map(function (q, i) { return '<button class="btn ghost ask-btn" data-action="m-ask" data-i="' + i + '">' + esc(q.q) + "</button>"; }).join("") + "</div></section>";
+      ask = b.passed
+        ? '<section class="panel"><p class="muted small">You passed on asking this witness. Waiting for the others.</p></section>'
+        : '<section class="panel"><p class="eyebrow">Your juror question</p><p class="muted small">You get one question for the whole trial. The first juror to send one gets it asked.</p><div class="ask">' +
+          s.jurorQuestion.map(function (q, i) { return '<button class="btn ghost ask-btn" data-action="m-ask" data-i="' + i + '">' + esc(q.q) + "</button>"; }).join("") +
+          '<button class="btn-link" data-action="m-no-question">No question</button></div></section>';
     }
     var off = "";
     if (me.lastFlag && me.lastFlag.seq > ui.flagSeen) {
@@ -1333,6 +1338,7 @@
         renderPhoneKeepScroll();
         break;
       case "m-ask": phoneSend({ type: "ask", i: Number(b.dataset.i) }); break;
+      case "m-no-question": phoneSend({ type: "noQuestion" }); break;
       case "m-speak":
         if (ui.sel) {
           phoneSend({ type: "choose", fact: ui.sel, target: ui.target || "all", approach: ui.approach });

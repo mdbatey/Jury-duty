@@ -9,10 +9,10 @@ All cases are fictional. Some borrow the general shape of common real-world case
 ## How to play
 
 1. Choose **Play solo** and **pick a case** from the docket. (To play with friends, see [Playing with friends](#playing-with-friends).)
-2. **Watch the trial.** Tap **Next** (or press the space bar) to move it along. Witnesses walk to the stand, lawyers question them, and objections pop up with a plain explanation of what the judge decided. Each line types out; tap **Next** once to finish it and again to move on. Use **Text speed** at the top to pick Slow, Normal or Instant. Turn on **Sound** for a gavel, objection stings and the gallery's murmurs. It's off by default, and only the courtroom screen plays sound, never phones.
-3. **Take notes.** When a witness says something important, tap **Write it down**. Your notebook holds 7 facts. Be careful: if the judge throws out an answer and you use it later, the other jurors will trust you less. Keep an eye on the jury box too: computer jurors react to what they hear, and those reactions shape where they stand when deliberation starts.
+2. **Watch the trial.** The trial moves along by itself; tap **Next** (or press the space bar) to skip ahead, or **Pause** to stop it. A bailiff opens court, and the judge hands each witness from one lawyer to the other. Witnesses walk to the stand, lawyers question them, and objections pop up with a plain explanation of what the judge decided. Each line types out; tap **Next** once to finish it and again to move on. Use **Text speed** at the top to pick Slow, Normal or Instant. Turn on **Sound** for a gavel, objection stings and the gallery's murmurs. It's off by default, and only the courtroom screen plays sound, never phones.
+3. **Take notes.** When a witness says something important, tap **Write it down**. You have about 15 seconds before each fact disappears. Your notebook holds 7 facts. Be careful: if the judge throws out an answer and you use it later, the other jurors will trust you less. Keep an eye on the jury box too: computer jurors react to what they hear, and those reactions shape where they stand when deliberation starts.
 4. **Catch contradictions.** If a witness says something that conflicts with a fact in your notebook, tap **Something's off** and pick that fact. Get it right and you earn a strong bonus fact for the jury room. You get 3 tries per trial, and each case has 2 contradictions to find, one helping each side.
-5. **Ask one question.** Some witnesses give you the chance to send the judge a written question. The answer can help either side.
+5. **Ask one question.** In each case, one witness takes juror questions right after their cross-examination. You'll get a heads-up when they take the stand. The trial waits while you choose, and the answer can help either side.
 6. **Deliberate.** In the jury room, each turn you play a fact from your notebook, choose who to say it to, and choose **how**: **Lay out the facts**, **Press hard** or **Ask a question**. Each juror is moved by different kinds of evidence and likes different approaches:
    - **Ruth:** procedure and records. Likes questions, dislikes being pressed.
    - **Dev:** records and timelines. Likes the facts laid out, dislikes being pressed.
@@ -30,8 +30,8 @@ One device is the **courtroom screen** that everyone watches. Each player is a j
 
 1. On the laptop or TV, open the game and choose **Host a game**, then pick a case. The screen shows a 4-letter **game code**.
 2. Everyone else opens the game on their phone, taps **Join a game**, and enters the code and their name. (Or open the join link shown on the courtroom screen.)
-3. The first person to join is the **foreperson**. Their phone has **Start trial**, **Next** and **Back**. The courtroom screen's space bar works too.
-4. During the trial, each phone shows the current line and lets that juror write down facts from the current witness's testimony, until the witness steps down. Each juror has their own private 7-fact notebook and one juror question.
+3. The first person to join is the **foreperson**. Their phone has **Start trial**, **Next**, **Back** and **Pause**. The trial moves along by itself, and the courtroom screen's space bar works too.
+4. During the trial, each phone shows the current line and lets that juror write down facts, each for about 15 seconds. Each juror has their own private 7-fact notebook and one juror question; the trial waits until everyone has asked or tapped **No question**.
 5. In the jury room, everyone picks a fact and who to say it to (or lets the others talk) at the same time. The courtroom screen plays the turn out. The foreperson can close a turn early and call votes.
 6. Ballots are secret. The courtroom screen shows the totals, the verdict and the true story, and each phone shows that juror's own report card.
 
@@ -65,6 +65,7 @@ python3 -m http.server 8000
 
 ### Testing multiplayer
 
+- Add `?noauto` to stop the trial from moving on by itself (handy for automated tests).
 - Add `?local` to the address (for example `http://localhost:8000/?local`) to connect tabs in the same browser instead of real devices. Open the host in one tab and the join link in others.
 - Add `?peerhost=host:port` to use your own [PeerJS server](https://github.com/peers/peerjs-server) instead of the public one.
 
